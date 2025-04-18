@@ -16,7 +16,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
       <div className="sticky top-0 z-40 bg-white shadow-sm border-b">
         <div className="container mx-auto px-4 py-2 flex justify-between items-center">
           <h1 className="text-2xl md:text-3xl font-display font-bold text-joy-primary">
-            ChoreJoy
+            Chore Champion
           </h1>
           <UserSwitcher />
         </div>
