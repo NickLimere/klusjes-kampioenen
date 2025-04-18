@@ -182,7 +182,10 @@ export default function AdminAnalytics() {
                     <YAxis />
                     <Tooltip 
                       formatter={(value, name) => [`${value} points`, name]}
-                      labelFormatter={(value) => `${pointsByUser[value]?.avatar || ""} ${pointsByUser[value]?.name || ""}`}
+                      labelFormatter={(value) => {
+                        const entry = pointsByUser[value as number];
+                        return entry ? `${entry.avatar || ""} ${entry.name || ""}` : "";
+                      }}
                     />
                     <Bar dataKey="points" fill="#9B87F5" />
                   </BarChart>
@@ -292,9 +295,52 @@ export default function AdminAnalytics() {
                   <YAxis dataKey="name" type="category" />
                   <Tooltip 
                     formatter={(value, name) => [`${value}%`, "Completion Rate"]}
-                    labelFormatter={(value, data) => {
-                      const entry = data[0].payload;
-                      return `${entry.avatar} ${entry.name} (${entry.actual}/${entry.expected} chores)`;
+                    labelFormatter={(label) => {
+                      // Fixed the error: properly handle when no data is available
+                      if (typeof label !== 'number' || !Array.isArray(childUsers) || childUsers.length === 0) {
+                        return "";
+                      }
+                      
+                      const userData = childUsers[label];
+                      if (!userData) return "";
+                      
+                      const userCompletionData = childUsers.map(user => {
+                        // Get user's assigned chores
+                        const assignedChores = chores.filter(chore => 
+                          chore.assignedTo.includes(user.id)
+                        );
+                        
+                        // Count number of daily and weekly chores
+                        const dailyChores = assignedChores.filter(c => c.recurrence === "daily").length;
+                        const weeklyChores = assignedChores.filter(c => c.recurrence === "weekly").length;
+                        
+                        // Calculate expected completions based on timeframe
+                        let expectedCompletions = 0;
+                        
+                        if (timeframe === "week") {
+                          expectedCompletions = (dailyChores * 7) + weeklyChores;
+                        } else if (timeframe === "month") {
+                          expectedCompletions = (dailyChores * 30) + (weeklyChores * 4);
+                        } else {
+                          expectedCompletions = (dailyChores * 365) + (weeklyChores * 52);
+                        }
+                        
+                        // Count actual completions
+                        const actualCompletions = filteredCompletedChores.filter(
+                          cc => cc.userId === user.id
+                        ).length;
+                        
+                        return {
+                          name: user.name,
+                          avatar: user.avatar,
+                          expected: expectedCompletions,
+                          actual: actualCompletions,
+                        };
+                      })[label];
+                      
+                      if (!userCompletionData) return "";
+                      
+                      return `${userCompletionData.avatar || ""} ${userCompletionData.name || ""} (${userCompletionData.actual}/${userCompletionData.expected} chores)`;
                     }}
                   />
                   <Bar 
