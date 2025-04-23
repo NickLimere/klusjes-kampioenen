@@ -1,5 +1,4 @@
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import AdminChores from "@/components/admin/AdminChores";
 import AdminRewards from "@/components/admin/AdminRewards";
@@ -8,20 +7,47 @@ import RewardApprovals from "@/components/admin/RewardApprovals";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useUser } from "@/contexts/UserContext";
 import { useNavigate } from "react-router-dom";
-import { useEffect } from "react";
+import { isAdminAuthenticated } from "@/lib/auth-service";
 
 export default function Admin() {
   const [activeTab, setActiveTab] = useState("analytics");
-  const { currentUser } = useUser();
+  const [isLoading, setIsLoading] = useState(true);
+  const { currentUser, setCurrentUser } = useUser();
   const navigate = useNavigate();
   
-  // Redirect non-admin users
+  // Check authentication and redirect if not authenticated
   useEffect(() => {
-    if (currentUser && currentUser.role !== "admin") {
-      navigate("/");
-    }
-  }, [currentUser, navigate]);
+    const checkAuth = async () => {
+      const authenticated = await isAdminAuthenticated();
+      if (!authenticated) {
+        navigate("/login");
+      } else if (!currentUser) {
+        // Set a temporary admin user if not already set
+        setCurrentUser({
+          id: "admin",
+          name: "Admin",
+          role: "admin",
+          points: 0,
+          avatar: "👨‍💼",
+          createdAt: new Date(),
+          updatedAt: new Date()
+        });
+      }
+      setIsLoading(false);
+    };
+    checkAuth();
+  }, [navigate, currentUser, setCurrentUser]);
   
+  if (isLoading) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+        </div>
+      </MainLayout>
+    );
+  }
+
   if (!currentUser || currentUser.role !== "admin") {
     return null;
   }

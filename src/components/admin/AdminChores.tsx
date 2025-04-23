@@ -1,7 +1,7 @@
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useChore, Chore } from "@/contexts/ChoreContext";
 import { useUser } from "@/contexts/UserContext";
+import { Timestamp } from "firebase/firestore";
 import {
   Card,
   CardContent,
@@ -59,8 +59,36 @@ export default function AdminChores() {
   });
   const [editingChore, setEditingChore] = useState<Chore | null>(null);
   
-  // Filter out admin users
-  const childUsers = users.filter(user => user.role !== "admin");
+  // Filter out admin users and log the results
+  const childUsers = users.filter(user => {
+    console.log('Checking user:', { id: user.id, name: user.name, role: user.role });
+    return user.role !== "admin" && user.id; // Also ensure user has an ID
+  });
+  
+  console.log('Filtered child users:', childUsers.map(user => ({ id: user.id, name: user.name })));
+  
+  // Create a test chore if none exist
+  useEffect(() => {
+    if (chores.length === 0 && childUsers.length > 0) {
+      console.log('Creating test chore...');
+      const testChore = {
+        title: "Make Bed",
+        description: "Make your bed every morning",
+        pointValue: 5,
+        assignedTo: [childUsers[0].id],
+        recurrence: "daily" as const
+      };
+      addChore(testChore).catch(error => {
+        console.error('Error creating test chore:', error);
+      });
+    }
+  }, [chores, childUsers, addChore]);
+  
+  // Log the current state
+  useEffect(() => {
+    console.log('Current chores:', chores);
+    console.log('Current users:', users.map(user => ({ id: user.id, name: user.name, role: user.role })));
+  }, [chores, users]);
   
   const resetChoreForm = () => {
     setNewChore({
@@ -77,33 +105,87 @@ export default function AdminChores() {
     setIsEditDialogOpen(true);
   };
   
-  const handleAddChore = () => {
+  const handleAddChore = async () => {
     if (!newChore.title) {
       toast.error("Please enter a title for the chore");
       return;
     }
     
-    if (newChore.assignedTo?.length === 0) {
+    // Filter out any undefined values from assignedTo
+    const validAssignedTo = (newChore.assignedTo || []).filter(id => id !== undefined && id !== null);
+    
+    if (validAssignedTo.length === 0) {
       toast.error("Please assign this chore to at least one person");
       return;
     }
     
-    const choreToAdd: Chore = {
-      id: `c${Date.now()}`,
-      title: newChore.title || "",
+    // Create a chore object that matches the Chore interface from db-types.ts
+    const choreToAdd = {
+      title: newChore.title,
       description: newChore.description || "",
       pointValue: newChore.pointValue || 5,
-      assignedTo: newChore.assignedTo || [],
-      recurrence: newChore.recurrence as "daily" | "weekly" || "daily",
+      assignedTo: validAssignedTo,
+      recurrence: (newChore.recurrence || "daily") as "daily" | "weekly",
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now()
     };
-    
-    addChore(choreToAdd);
-    toast.success("Chore added successfully");
-    resetChoreForm();
-    setIsAddDialogOpen(false);
+
+    try {
+      console.log('Starting to add chore with data:', newChore);
+      console.log('Processed chore data:', choreToAdd);
+      console.log('Data types:', {
+        title: typeof choreToAdd.title,
+        description: typeof choreToAdd.description,
+        pointValue: typeof choreToAdd.pointValue,
+        assignedTo: Array.isArray(choreToAdd.assignedTo),
+        assignedToContents: choreToAdd.assignedTo.map(id => ({ id, type: typeof id })),
+        recurrence: typeof choreToAdd.recurrence,
+        createdAt: choreToAdd.createdAt instanceof Timestamp,
+        updatedAt: choreToAdd.updatedAt instanceof Timestamp
+      });
+
+      // Validate required fields
+      if (!choreToAdd.title || !choreToAdd.assignedTo || choreToAdd.assignedTo.length === 0) {
+        console.error('Validation failed:', {
+          hasTitle: !!choreToAdd.title,
+          hasAssignedTo: !!choreToAdd.assignedTo,
+          assignedToLength: choreToAdd.assignedTo.length,
+          assignedToContents: choreToAdd.assignedTo
+        });
+        throw new Error("Missing required fields");
+      }
+
+      // Ensure all fields have the correct type
+      if (typeof choreToAdd.pointValue !== 'number') {
+        console.error('Invalid pointValue type:', typeof choreToAdd.pointValue);
+        throw new Error("Point value must be a number");
+      }
+
+      if (!['daily', 'weekly'].includes(choreToAdd.recurrence)) {
+        console.error('Invalid recurrence value:', choreToAdd.recurrence);
+        throw new Error("Recurrence must be either 'daily' or 'weekly'");
+      }
+
+      console.log('Attempting to add chore to Firestore...');
+      const result = await addChore(choreToAdd);
+      console.log('Chore added successfully with ID:', result);
+      
+      toast.success("Chore added successfully");
+      resetChoreForm();
+      setIsAddDialogOpen(false);
+    } catch (error) {
+      console.error('Detailed error adding chore:', {
+        error,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        errorStack: error instanceof Error ? error.stack : 'No stack trace',
+        choreData: newChore,
+        processedChoreData: choreToAdd
+      });
+      toast.error("Failed to add chore. Check console for details.");
+    }
   };
   
-  const handleUpdateChore = () => {
+  const handleUpdateChore = async () => {
     if (!editingChore) return;
     
     if (!editingChore.title) {
@@ -116,14 +198,41 @@ export default function AdminChores() {
       return;
     }
     
-    updateChore(editingChore);
-    toast.success("Chore updated successfully");
-    setIsEditDialogOpen(false);
+    try {
+      // Create a clean update object without undefined values
+      const updateData = {
+        title: editingChore.title,
+        description: editingChore.description || "",
+        pointValue: editingChore.pointValue,
+        assignedTo: editingChore.assignedTo,
+        recurrence: editingChore.recurrence,
+        updatedAt: Timestamp.now()
+      };
+
+      // Remove any undefined values
+      Object.keys(updateData).forEach(key => {
+        if (updateData[key as keyof typeof updateData] === undefined) {
+          delete updateData[key as keyof typeof updateData];
+        }
+      });
+
+      await updateChore(editingChore.id, updateData);
+      toast.success("Chore updated successfully");
+      setIsEditDialogOpen(false);
+    } catch (error) {
+      console.error('Error updating chore:', error);
+      toast.error("Failed to update chore");
+    }
   };
   
-  const handleDeleteChore = (choreId: string) => {
-    deleteChore(choreId);
-    toast.success("Chore deleted successfully");
+  const handleDeleteChore = async (choreId: string) => {
+    try {
+      await deleteChore(choreId);
+      toast.success("Chore deleted successfully");
+    } catch (error) {
+      console.error('Error deleting chore:', error);
+      toast.error("Failed to delete chore");
+    }
   };
   
   return (
@@ -135,10 +244,12 @@ export default function AdminChores() {
             Add, edit, or remove chores for your family members
           </CardDescription>
         </div>
-        <Button onClick={() => setIsAddDialogOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Add Chore
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={() => setIsAddDialogOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Chore
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         <Table>
@@ -159,11 +270,11 @@ export default function AdminChores() {
                 <TableCell className="capitalize">{chore.recurrence}</TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-1">
-                    {chore.assignedTo.map((userId) => {
+                    {chore.assignedTo.map((userId, index) => {
                       const user = users.find((u) => u.id === userId);
                       return user ? (
                         <span
-                          key={userId}
+                          key={`${chore.id}-${userId}-${index}`}
                           className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-gray-100"
                         >
                           {user.avatar} {user.name}
@@ -287,22 +398,25 @@ export default function AdminChores() {
                   >
                     <Checkbox
                       id={`user-${user.id}`}
-                      checked={(newChore.assignedTo || []).includes(user.id)}
+                      checked={newChore.assignedTo?.includes(user.id) || false}
                       onCheckedChange={(checked) => {
-                        const assignedTo = newChore.assignedTo || [];
-                        if (checked) {
-                          setNewChore({
-                            ...newChore,
-                            assignedTo: [...assignedTo, user.id],
-                          });
-                        } else {
-                          setNewChore({
-                            ...newChore,
-                            assignedTo: assignedTo.filter(
-                              (id) => id !== user.id
-                            ),
-                          });
-                        }
+                        console.log('Checkbox changed:', { userId: user.id, checked });
+                        setNewChore(prev => {
+                          const currentAssignedTo = prev.assignedTo || [];
+                          let newAssignedTo: string[];
+                          
+                          if (checked) {
+                            newAssignedTo = [...currentAssignedTo, user.id];
+                          } else {
+                            newAssignedTo = currentAssignedTo.filter(id => id !== user.id);
+                          }
+                          
+                          console.log('New assignedTo:', newAssignedTo);
+                          return {
+                            ...prev,
+                            assignedTo: newAssignedTo
+                          };
+                        });
                       }}
                     />
                     <Label
@@ -417,21 +531,23 @@ export default function AdminChores() {
                     >
                       <Checkbox
                         id={`edit-user-${user.id}`}
-                        checked={editingChore.assignedTo.includes(user.id)}
+                        checked={editingChore?.assignedTo.includes(user.id) || false}
                         onCheckedChange={(checked) => {
-                          if (checked) {
-                            setEditingChore({
-                              ...editingChore,
-                              assignedTo: [...editingChore.assignedTo, user.id],
-                            });
-                          } else {
-                            setEditingChore({
-                              ...editingChore,
-                              assignedTo: editingChore.assignedTo.filter(
-                                (id) => id !== user.id
-                              ),
-                            });
-                          }
+                          if (!editingChore) return;
+                          setEditingChore(prev => {
+                            if (!prev) return prev;
+                            if (checked) {
+                              return {
+                                ...prev,
+                                assignedTo: [...prev.assignedTo, user.id]
+                              };
+                            } else {
+                              return {
+                                ...prev,
+                                assignedTo: prev.assignedTo.filter(id => id !== user.id)
+                              };
+                            }
+                          });
                         }}
                       />
                       <Label
@@ -448,10 +564,7 @@ export default function AdminChores() {
           )}
           
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsEditDialogOpen(false)}
-            >
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
               Cancel
             </Button>
             <Button onClick={handleUpdateChore}>Save Changes</Button>

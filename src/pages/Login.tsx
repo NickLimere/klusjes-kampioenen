@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUser } from "@/contexts/UserContext";
@@ -14,31 +13,32 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/sonner";
+import { loginAdmin } from "@/lib/auth-service";
 
 export default function Login() {
-  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const { users, setCurrentUser } = useUser();
+  const { setCurrentUser } = useUser();
   const navigate = useNavigate();
   
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // In a real app, this would validate against a database
-    // For this demo, we'll just check if the user exists and is an admin
+    const isAuthenticated = await loginAdmin(password);
     
-    const adminUsers = users.filter(user => user.role === "admin");
-    
-    if (email.includes("admin") && password.length >= 4) {
-      // Set the first admin user as current
-      if (adminUsers.length > 0) {
-        setCurrentUser(adminUsers[0]);
-        toast.success("Welcome back!");
-        navigate("/admin");
-      }
+    if (isAuthenticated) {
+      // Set a temporary admin user
+      setCurrentUser({
+        id: "admin",
+        name: "Admin",
+        role: "admin",
+        points: 0,
+        avatar: "👨‍💼"
+      });
+      toast.success("Welcome back!");
+      navigate("/admin");
     } else {
-      toast.error("Invalid credentials", {
-        description: "Please check your email and password.",
+      toast.error("Invalid password", {
+        description: "Please check your password and try again.",
       });
     }
   };
@@ -55,37 +55,14 @@ export default function Login() {
             </div>
             <CardTitle className="text-2xl font-bold">Admin Login</CardTitle>
             <CardDescription>
-              Enter your credentials to access the admin dashboard
+              Enter the admin password to access the dashboard
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleLogin}>
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="admin@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="password">Password</Label>
-                    <a
-                      href="#"
-                      className="text-sm text-joy-primary hover:underline"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        toast.info("For demo purposes, any password with at least 4 characters will work with an email containing 'admin'");
-                      }}
-                    >
-                      Forgot password?
-                    </a>
-                  </div>
+                  <Label htmlFor="password">Password</Label>
                   <Input
                     id="password"
                     type="password"
@@ -103,7 +80,7 @@ export default function Login() {
           </CardContent>
           <CardFooter className="text-center">
             <p className="text-sm text-gray-500 w-full">
-              For demo: use any email with "admin" and a password of at least 4 characters
+              Enter the admin password to access the dashboard
             </p>
           </CardFooter>
         </Card>

@@ -1,5 +1,6 @@
-
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useState, ReactNode, useEffect } from "react";
+import { getUsers } from "@/lib/db-service";
+import { Timestamp } from "firebase/firestore";
 
 // Define types for our user data
 export type UserRole = "child" | "admin";
@@ -10,6 +11,8 @@ export interface User {
   avatar: string;
   points: number;
   role: UserRole;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface UserContextType {
@@ -20,52 +23,40 @@ export interface UserContextType {
   updateUser: (user: User) => void;
 }
 
-// Create sample users data
-export const sampleUsers: User[] = [
-  {
-    id: "1",
-    name: "Alex",
-    avatar: "👦",
-    points: 120,
-    role: "child",
-  },
-  {
-    id: "2",
-    name: "Emma",
-    avatar: "👧",
-    points: 85,
-    role: "child",
-  },
-  {
-    id: "3",
-    name: "Jack",
-    avatar: "👨",
-    points: 215,
-    role: "child",
-  },
-  {
-    id: "4",
-    name: "Mom",
-    avatar: "👩",
-    points: 0,
-    role: "admin",
-  },
-  {
-    id: "5",
-    name: "Dad",
-    avatar: "🧔",
-    points: 0,
-    role: "admin",
-  },
-];
-
 // Create the context
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
 // Context provider component
 export function UserProvider({ children }: { children: ReactNode }) {
-  const [users, setUsers] = useState<User[]>(sampleUsers);
-  const [currentUser, setCurrentUser] = useState<User | null>(sampleUsers[0]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch users from Firestore on component mount
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const fetchedUsers = await getUsers();
+        // Convert Firestore Timestamps to JavaScript Dates
+        const convertedUsers = fetchedUsers.map(user => ({
+          ...user,
+          createdAt: (user.createdAt as Timestamp).toDate(),
+          updatedAt: (user.updatedAt as Timestamp).toDate()
+        }));
+        setUsers(convertedUsers);
+        // Set the first user as current user if none is set
+        if (!currentUser && convertedUsers.length > 0) {
+          setCurrentUser(convertedUsers[0]);
+        }
+      } catch (error) {
+        console.error('Error fetching users:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchUsers();
+  }, []);
 
   const addUser = (user: User) => {
     setUsers((prevUsers) => [...prevUsers, user]);
@@ -81,6 +72,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
       setCurrentUser(updatedUser);
     }
   };
+
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
 
   return (
     <UserContext.Provider

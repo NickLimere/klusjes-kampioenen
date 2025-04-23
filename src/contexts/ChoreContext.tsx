@@ -1,194 +1,159 @@
-
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useState, ReactNode, useEffect } from "react";
+import { 
+  getChores, 
+  createChore as dbCreateChore, 
+  updateChore as dbUpdateChore, 
+  deleteChore as dbDeleteChore,
+  completeChore as dbCompleteChore,
+  getUserCompletedChores as dbGetUserCompletedChores
+} from "@/lib/db-service";
+import { Timestamp } from "firebase/firestore";
+import type { Chore as DbChore, CompletedChore as DbCompletedChore } from "@/lib/db-types";
 
 // Define types for our chore data
-export interface Chore {
-  id: string;
-  title: string;
-  description?: string;
-  pointValue: number;
-  assignedTo: string[];
-  recurrence: "daily" | "weekly";
+export interface Chore extends Omit<DbChore, 'createdAt' | 'updatedAt' | 'dueDate'> {
+  createdAt: Date;
+  updatedAt: Date;
   dueDate?: Date;
 }
 
-export interface CompletedChore {
-  id: string;
-  choreId: string;
-  userId: string;
+export interface CompletedChore extends Omit<DbCompletedChore, 'completedAt'> {
   completedAt: Date;
-  pointsEarned: number;
 }
 
 export interface ChoreContextType {
   chores: Chore[];
   completedChores: CompletedChore[];
-  addChore: (chore: Chore) => void;
-  updateChore: (chore: Chore) => void;
-  deleteChore: (choreId: string) => void;
-  completeChore: (choreId: string, userId: string) => void;
+  addChore: (chore: Omit<DbChore, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>;
+  updateChore: (id: string, chore: Partial<DbChore>) => Promise<void>;
+  deleteChore: (id: string) => Promise<void>;
+  completeChore: (choreId: string, userId: string) => Promise<string>;
   getUserChores: (userId: string) => Chore[];
-  getUserCompletedChores: (userId: string) => CompletedChore[];
+  getUserCompletedChores: (userId: string) => Promise<CompletedChore[]>;
 }
-
-// Create sample chores data
-export const sampleChores: Chore[] = [
-  {
-    id: "c1",
-    title: "Make your bed",
-    description: "Tuck in sheets and arrange pillows neatly",
-    pointValue: 5,
-    assignedTo: ["1", "2", "3"],
-    recurrence: "daily",
-  },
-  {
-    id: "c2",
-    title: "Feed the pet",
-    description: "Give Buddy his food and fresh water",
-    pointValue: 5,
-    assignedTo: ["1", "2"],
-    recurrence: "daily",
-  },
-  {
-    id: "c3",
-    title: "Take out trash",
-    description: "Empty all trash bins and take to outside container",
-    pointValue: 10,
-    assignedTo: ["3"],
-    recurrence: "weekly",
-  },
-  {
-    id: "c4",
-    title: "Clean bathroom sink",
-    description: "Wipe down sink, counter and mirror",
-    pointValue: 15,
-    assignedTo: ["2", "3"],
-    recurrence: "weekly",
-  },
-  {
-    id: "c5",
-    title: "Set the table",
-    description: "Place plates, utensils, and napkins for everyone",
-    pointValue: 5,
-    assignedTo: ["1", "2", "3"],
-    recurrence: "daily",
-  },
-  {
-    id: "c6",
-    title: "Vacuum living room",
-    description: "Vacuum carpet and under furniture",
-    pointValue: 20,
-    assignedTo: ["3"],
-    recurrence: "weekly",
-  },
-];
-
-// Sample completed chores (past week)
-export const sampleCompletedChores: CompletedChore[] = [
-  {
-    id: "cc1",
-    choreId: "c1",
-    userId: "1",
-    completedAt: new Date(Date.now() - 24 * 60 * 60 * 1000), // yesterday
-    pointsEarned: 5,
-  },
-  {
-    id: "cc2",
-    choreId: "c2",
-    userId: "1",
-    completedAt: new Date(Date.now() - 24 * 60 * 60 * 1000), // yesterday
-    pointsEarned: 5,
-  },
-  {
-    id: "cc3",
-    choreId: "c5",
-    userId: "1",
-    completedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), // 2 days ago
-    pointsEarned: 5,
-  },
-  {
-    id: "cc4",
-    choreId: "c1",
-    userId: "2",
-    completedAt: new Date(Date.now() - 24 * 60 * 60 * 1000), // yesterday
-    pointsEarned: 5,
-  },
-  {
-    id: "cc5",
-    choreId: "c4",
-    userId: "2",
-    completedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000), // 3 days ago
-    pointsEarned: 15,
-  },
-  {
-    id: "cc6",
-    choreId: "c3",
-    userId: "3",
-    completedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), // 5 days ago
-    pointsEarned: 10,
-  },
-  {
-    id: "cc7",
-    choreId: "c6",
-    userId: "3",
-    completedAt: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000), // 6 days ago
-    pointsEarned: 20,
-  },
-];
 
 // Create the context
 const ChoreContext = createContext<ChoreContextType | undefined>(undefined);
 
 // Context provider component
 export function ChoreProvider({ children }: { children: ReactNode }) {
-  const [chores, setChores] = useState<Chore[]>(sampleChores);
-  const [completedChores, setCompletedChores] = useState<CompletedChore[]>(
-    sampleCompletedChores
-  );
+  const [chores, setChores] = useState<Chore[]>([]);
+  const [completedChores, setCompletedChores] = useState<CompletedChore[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const addChore = (chore: Chore) => {
-    setChores((prevChores) => [...prevChores, chore]);
+  // Fetch chores from Firestore on component mount
+  useEffect(() => {
+    const fetchChores = async () => {
+      try {
+        console.log('Starting to fetch chores...');
+        const fetchedChores = await getChores();
+        console.log('Raw fetched chores:', fetchedChores);
+        
+        // Convert Firestore Timestamps to JavaScript Dates
+        const convertedChores = fetchedChores.map(chore => {
+          const converted = {
+            ...chore,
+            id: chore.id, // Ensure we have the ID
+            createdAt: (chore.createdAt as Timestamp).toDate(),
+            updatedAt: (chore.updatedAt as Timestamp).toDate(),
+            dueDate: chore.dueDate ? (chore.dueDate as Timestamp).toDate() : undefined
+          };
+          console.log('Converted chore:', converted);
+          return converted;
+        });
+        
+        console.log('Setting chores in state:', convertedChores);
+        setChores(convertedChores);
+      } catch (error) {
+        console.error('Error fetching chores:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchChores();
+  }, []);
+
+  const addChore = async (chore: Omit<DbChore, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const dbChore = {
+      ...chore,
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now()
+    };
+    const id = await dbCreateChore(dbChore);
+    const newChore: Chore = {
+      ...chore,
+      id,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      dueDate: chore.dueDate ? (chore.dueDate as Timestamp).toDate() : undefined
+    };
+    setChores(prev => [...prev, newChore]);
+    return id;
   };
 
-  const updateChore = (updatedChore: Chore) => {
-    setChores((prevChores) =>
-      prevChores.map((chore) =>
-        chore.id === updatedChore.id ? updatedChore : chore
-      )
+  const updateChore = async (id: string, chore: Partial<DbChore>) => {
+    await dbUpdateChore(id, chore);
+    setChores(prev =>
+      prev.map(c => c.id === id ? { 
+        ...c, 
+        ...chore,
+        updatedAt: new Date(),
+        createdAt: c.createdAt instanceof Timestamp ? c.createdAt.toDate() : c.createdAt,
+        dueDate: chore.dueDate ? (chore.dueDate as Timestamp).toDate() : c.dueDate
+      } : c)
     );
   };
 
-  const deleteChore = (choreId: string) => {
-    setChores((prevChores) => prevChores.filter((chore) => chore.id !== choreId));
+  const deleteChore = async (id: string) => {
+    await dbDeleteChore(id);
+    setChores(prev => prev.filter(c => c.id !== id));
   };
 
-  const completeChore = (choreId: string, userId: string) => {
-    const chore = chores.find((c) => c.id === choreId);
-    
-    if (chore) {
-      // Generate a unique ID for completed chore
-      const newId = `cc${Date.now()}`;
-      
-      // Create completed chore record
-      const completedChore: CompletedChore = {
-        id: newId,
-        choreId,
-        userId,
-        completedAt: new Date(),
-        pointsEarned: chore.pointValue,
-      };
-      
-      setCompletedChores((prev) => [...prev, completedChore]);
-    }
+  const completeChore = async (choreId: string, userId: string) => {
+    const chore = chores.find(c => c.id === choreId);
+    if (!chore) throw new Error('Chore not found');
+
+    const id = await dbCompleteChore({
+      choreId,
+      userId,
+      completedAt: Timestamp.now(),
+      pointsEarned: chore.pointValue
+    });
+
+    const newCompletedChore: CompletedChore = {
+      id,
+      choreId,
+      userId,
+      completedAt: new Date(),
+      pointsEarned: chore.pointValue
+    };
+
+    setCompletedChores(prev => [...prev, newCompletedChore]);
+    return id;
   };
 
   const getUserChores = (userId: string) => {
-    return chores.filter((chore) => chore.assignedTo.includes(userId));
+    return chores.filter(chore => chore.assignedTo.includes(userId));
   };
 
-  const getUserCompletedChores = (userId: string) => {
-    return completedChores.filter((cc) => cc.userId === userId);
+  const getUserCompletedChores = async (userId: string) => {
+    const fetchedChores = await dbGetUserCompletedChores(userId);
+    const convertedChores = fetchedChores.map(chore => ({
+      ...chore,
+      completedAt: (chore.completedAt as Timestamp).toDate()
+    }));
+    setCompletedChores(prev => {
+      const existingIds = new Set(prev.map(c => c.id));
+      const newChores = convertedChores.filter(c => !existingIds.has(c.id));
+      return [...prev, ...newChores];
+    });
+    return convertedChores;
   };
+
+  if (isLoading) {
+    return <div>Loading chores...</div>;
+  }
 
   return (
     <ChoreContext.Provider

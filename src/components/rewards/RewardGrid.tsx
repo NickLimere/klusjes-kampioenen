@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useReward } from "@/contexts/RewardContext";
 import { useUser } from "@/contexts/UserContext";
@@ -19,25 +18,28 @@ export default function RewardGrid() {
   const { rewards, redeemReward } = useReward();
   const { currentUser } = useUser();
   const [selectedReward, setSelectedReward] = useState<string | null>(null);
+  const [isRedeeming, setIsRedeeming] = useState(false);
   
   if (!currentUser) return null;
   const isAdmin = currentUser.role === "admin";
   
-  const handleRedeemReward = (rewardId: string) => {
+  const handleRedeemReward = async (rewardId: string) => {
     if (currentUser && rewardId) {
       const reward = rewards.find(r => r.id === rewardId);
       
       if (reward && currentUser.points >= reward.pointCost) {
-        const success = redeemReward(rewardId, currentUser.id);
-        
-        if (success) {
+        try {
+          setIsRedeeming(true);
+          await redeemReward(rewardId, currentUser.id);
           toast.success("Reward redeemed! Waiting for approval.", {
             description: `You have redeemed ${reward.title}.`,
           });
-        } else {
+        } catch (error) {
           toast.error("Couldn't redeem reward", {
             description: "There was an error processing your request.",
           });
+        } finally {
+          setIsRedeeming(false);
         }
       } else {
         toast.error("Not enough points", {
@@ -62,7 +64,7 @@ export default function RewardGrid() {
                 !canAfford ? "opacity-70" : ""
               }`}
             >
-              <div className="text-4xl mb-3">{reward.image}</div>
+              <div className="text-4xl mb-3">{reward.icon}</div>
               <h3 className="text-lg font-bold mb-1">{reward.title}</h3>
               {reward.description && (
                 <p className="text-gray-600 text-sm mb-4">{reward.description}</p>
@@ -76,7 +78,7 @@ export default function RewardGrid() {
                 <Button
                   variant="default"
                   size="sm"
-                  disabled={!canAfford}
+                  disabled={!canAfford || isRedeeming}
                   onClick={() => setSelectedReward(reward.id)}
                   className="btn-bounce"
                 >
@@ -108,8 +110,9 @@ export default function RewardGrid() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => selectedReward && handleRedeemReward(selectedReward)}
+              disabled={isRedeeming}
             >
-              Redeem
+              {isRedeeming ? "Redeeming..." : "Redeem"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

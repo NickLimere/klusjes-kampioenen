@@ -1,162 +1,144 @@
-
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useState, ReactNode, useEffect } from "react";
+import { 
+  getRewards, 
+  createReward as dbCreateReward, 
+  updateReward as dbUpdateReward, 
+  deleteReward as dbDeleteReward,
+  redeemReward as dbRedeemReward,
+  updateRedeemStatus as dbUpdateRedeemStatus,
+  getUserRedeemedRewards as dbGetUserRedeemedRewards
+} from "@/lib/db-service";
+import { Timestamp } from "firebase/firestore";
+import type { Reward as DbReward, RedeemedReward as DbRedeemedReward } from "@/lib/db-types";
 
 // Define types for our reward data
-export interface Reward {
-  id: string;
-  title: string;
-  description?: string;
-  image?: string;
-  pointCost: number;
+export interface Reward extends Omit<DbReward, 'createdAt' | 'updatedAt'> {
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-export interface RedeemedReward {
-  id: string;
-  rewardId: string;
-  userId: string;
+export interface RedeemedReward extends Omit<DbRedeemedReward, 'redeemedAt' | 'updatedAt'> {
   redeemedAt: Date;
-  status: "pending" | "approved" | "denied";
+  updatedAt: Date;
 }
 
 export interface RewardContextType {
   rewards: Reward[];
   redeemedRewards: RedeemedReward[];
-  addReward: (reward: Reward) => void;
-  updateReward: (reward: Reward) => void;
-  deleteReward: (rewardId: string) => void;
-  redeemReward: (rewardId: string, userId: string) => boolean;
-  updateRedeemStatus: (id: string, status: "approved" | "denied") => void;
-  getUserRedeemedRewards: (userId: string) => RedeemedReward[];
+  addReward: (reward: Omit<DbReward, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>;
+  updateReward: (id: string, reward: Partial<DbReward>) => Promise<void>;
+  deleteReward: (id: string) => Promise<void>;
+  redeemReward: (rewardId: string, userId: string) => Promise<string>;
+  updateRedeemStatus: (id: string, status: "approved" | "denied") => Promise<void>;
+  getUserRedeemedRewards: (userId: string) => Promise<RedeemedReward[]>;
 }
-
-// Create sample rewards data
-export const sampleRewards: Reward[] = [
-  {
-    id: "r1",
-    title: "Movie Night",
-    description: "Pick any movie for family movie night",
-    image: "🎬",
-    pointCost: 50,
-  },
-  {
-    id: "r2",
-    title: "1-Hour Screen Time",
-    description: "Extra hour of video games or tablet time",
-    image: "🎮",
-    pointCost: 30,
-  },
-  {
-    id: "r3",
-    title: "Sleepover",
-    description: "Have a friend sleepover this weekend",
-    image: "🛏️",
-    pointCost: 100,
-  },
-  {
-    id: "r4",
-    title: "Skip One Chore",
-    description: "Skip one assigned chore of your choice",
-    image: "🚫",
-    pointCost: 25,
-  },
-  {
-    id: "r5",
-    title: "Special Dessert",
-    description: "Choose any dessert for after dinner",
-    image: "🍦",
-    pointCost: 20,
-  },
-  {
-    id: "r6",
-    title: "$5 Allowance",
-    description: "Get $5 in cash to spend how you want",
-    image: "💵",
-    pointCost: 75,
-  },
-];
-
-// Sample redeemed rewards
-export const sampleRedeemedRewards: RedeemedReward[] = [
-  {
-    id: "rr1",
-    rewardId: "r2",
-    userId: "1",
-    redeemedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), // 2 days ago
-    status: "approved",
-  },
-  {
-    id: "rr2",
-    rewardId: "r5",
-    userId: "2",
-    redeemedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), // 5 days ago
-    status: "approved",
-  },
-  {
-    id: "rr3",
-    rewardId: "r4",
-    userId: "3",
-    redeemedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000), // 1 day ago
-    status: "pending",
-  },
-];
 
 // Create the context
 const RewardContext = createContext<RewardContextType | undefined>(undefined);
 
 // Context provider component
 export function RewardProvider({ children }: { children: ReactNode }) {
-  const [rewards, setRewards] = useState<Reward[]>(sampleRewards);
-  const [redeemedRewards, setRedeemedRewards] = useState<RedeemedReward[]>(
-    sampleRedeemedRewards
-  );
+  const [rewards, setRewards] = useState<Reward[]>([]);
+  const [redeemedRewards, setRedeemedRewards] = useState<RedeemedReward[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const addReward = (reward: Reward) => {
-    setRewards((prevRewards) => [...prevRewards, reward]);
+  // Fetch rewards from Firestore on component mount
+  useEffect(() => {
+    const fetchRewards = async () => {
+      try {
+        const fetchedRewards = await getRewards();
+        // Convert Firestore Timestamps to JavaScript Dates
+        const convertedRewards = fetchedRewards.map(reward => ({
+          ...reward,
+          createdAt: (reward.createdAt as Timestamp).toDate(),
+          updatedAt: (reward.updatedAt as Timestamp).toDate()
+        }));
+        setRewards(convertedRewards);
+      } catch (error) {
+        console.error('Error fetching rewards:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchRewards();
+  }, []);
+
+  const addReward = async (reward: Omit<DbReward, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const id = await dbCreateReward(reward);
+    const newReward = {
+      ...reward,
+      id,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    setRewards(prev => [...prev, newReward]);
+    return id;
   };
 
-  const updateReward = (updatedReward: Reward) => {
-    setRewards((prevRewards) =>
-      prevRewards.map((reward) =>
-        reward.id === updatedReward.id ? updatedReward : reward
-      )
+  const updateReward = async (id: string, reward: Partial<DbReward>) => {
+    await dbUpdateReward(id, reward);
+    setRewards(prev =>
+      prev.map(r => r.id === id ? { 
+        ...r, 
+        ...reward, 
+        updatedAt: new Date(),
+        createdAt: r.createdAt instanceof Timestamp ? r.createdAt.toDate() : r.createdAt
+      } : r)
     );
   };
 
-  const deleteReward = (rewardId: string) => {
-    setRewards((prevRewards) =>
-      prevRewards.filter((reward) => reward.id !== rewardId)
-    );
+  const deleteReward = async (id: string) => {
+    await dbDeleteReward(id);
+    setRewards(prev => prev.filter(r => r.id !== id));
   };
 
-  // Returns true if redemption was successful, false if not enough points
-  const redeemReward = (rewardId: string, userId: string): boolean => {
-    // In a real app, you would check the user's points balance here
-    // and deduct points if sufficient
+  const redeemReward = async (rewardId: string, userId: string) => {
+    const id = await dbRedeemReward({
+      rewardId,
+      userId,
+      redeemedAt: Timestamp.now(),
+      status: "pending"
+    });
     
-    // For this demo, we'll just create the redemption record
-    const newId = `rr${Date.now()}`;
-    
-    const redeemedReward: RedeemedReward = {
-      id: newId,
+    const newRedeemedReward: RedeemedReward = {
+      id,
       rewardId,
       userId,
       redeemedAt: new Date(),
       status: "pending",
+      updatedAt: new Date()
     };
     
-    setRedeemedRewards((prev) => [...prev, redeemedReward]);
-    return true;
+    setRedeemedRewards(prev => [...prev, newRedeemedReward]);
+    return id;
   };
 
-  const updateRedeemStatus = (id: string, status: "approved" | "denied") => {
-    setRedeemedRewards((prev) =>
-      prev.map((rr) => (rr.id === id ? { ...rr, status } : rr))
+  const updateRedeemStatus = async (id: string, status: "approved" | "denied") => {
+    await dbUpdateRedeemStatus(id, status);
+    setRedeemedRewards(prev =>
+      prev.map(rr => rr.id === id ? { ...rr, status, updatedAt: new Date() } : rr)
     );
   };
 
-  const getUserRedeemedRewards = (userId: string) => {
-    return redeemedRewards.filter((rr) => rr.userId === userId);
+  const getUserRedeemedRewards = async (userId: string) => {
+    const fetchedRewards = await dbGetUserRedeemedRewards(userId);
+    const convertedRewards = fetchedRewards.map(reward => ({
+      ...reward,
+      redeemedAt: (reward.redeemedAt as Timestamp).toDate(),
+      updatedAt: (reward.updatedAt as Timestamp).toDate()
+    }));
+    setRedeemedRewards(prev => {
+      const existingIds = new Set(prev.map(r => r.id));
+      const newRewards = convertedRewards.filter(r => !existingIds.has(r.id));
+      return [...prev, ...newRewards];
+    });
+    return convertedRewards;
   };
+
+  if (isLoading) {
+    return <div>Loading rewards...</div>;
+  }
 
   return (
     <RewardContext.Provider
