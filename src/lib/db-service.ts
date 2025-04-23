@@ -153,6 +153,11 @@ export const completeChore = async (completion: Omit<CompletedChore, 'id'>): Pro
   return docRef.id;
 };
 
+export const deleteCompletedChore = async (id: string): Promise<void> => {
+  const docRef = doc(completedChoresCollection, id);
+  await deleteDoc(docRef);
+};
+
 export const getUserCompletedChores = async (userId: string): Promise<CompletedChore[]> => {
   const querySnapshot = await getDocs(query(completedChoresCollection, where('userId', '==', userId)));
   return querySnapshot.docs.map(doc => ({

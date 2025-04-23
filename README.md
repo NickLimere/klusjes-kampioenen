@@ -1,59 +1,110 @@
-# Welcome to Chore Champion
+# Klusjes Kampioenen iPad App
 
-## Project info
+This is the iPad version of the Klusjes Kampioenen app, built with React Native and Expo.
 
-**URL**: https://lovable.dev/projects/0b491c80-48d7-4fee-977c-0b574b65936a
+## Features
 
-## How can I edit this code?
+- Same functionality as the web version
+- Optimized for iPad interface
+- Offline support
+- Push notifications
+- Split view support
+- Touch interactions
 
-There are several ways of editing your application.
+## Getting Started
 
-**Use Lovable**
+### Prerequisites
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/0b491c80-48d7-4fee-977c-0b574b65936a) and start prompting.
+- Node.js (v18 or later)
+- npm or yarn
+- Expo CLI
+- Xcode (for iOS development)
+- Android Studio (for Android development)
 
-Changes made via Lovable will be committed automatically to this repo.
+### Installation
 
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+1. Clone the repository:
+```bash
+git clone https://github.com/yourusername/klusjes-kampioenen.git
+cd klusjes-kampioenen
 ```
 
-## What technologies are used for this project?
+2. Install dependencies:
+```bash
+npm install
+```
 
-Chore Champion is built with:
+3. Start the development server:
+```bash
+npm start
+```
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+4. Run on iPad simulator:
+```bash
+npm run ios
+```
 
-## How can I deploy this project?
+## Project Structure
 
-Simply open [Lovable](https://lovable.dev/projects/0b491c80-48d7-4fee-977c-0b574b65936a) and click on Share -> Publish.
+```
+src/native/
+├── components/         # Reusable UI components
+├── screens/           # Screen components
+├── navigation/        # Navigation setup
+├── contexts/          # React contexts
+├── lib/              # Utility functions and services
+└── assets/           # Images, fonts, etc.
+```
 
-## Can I connect a custom domain to my Lovable project?
+## Development
 
-Yes, you can!
+### Code Style
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+- Follow the existing code style
+- Use TypeScript for type safety
+- Follow React Native best practices
+- Use functional components with hooks
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+### Testing
+
+Run tests with:
+```bash
+npm test
+```
+
+### Building
+
+Build the app with:
+```bash
+npm run build
+```
+
+## Deployment
+
+### iOS
+
+1. Update version in app.json
+2. Build for App Store:
+```bash
+expo build:ios
+```
+
+### Android
+
+1. Update version in app.json
+2. Build for Play Store:
+```bash
+expo build:android
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details. 

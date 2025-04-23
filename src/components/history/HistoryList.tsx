@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useChore } from "@/contexts/ChoreContext";
 import { useUser } from "@/contexts/UserContext";
@@ -17,11 +16,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Calendar, CheckCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Calendar, CheckCircle, Trash2 } from "lucide-react";
+import { toast } from "@/components/ui/sonner";
 
 export default function HistoryList() {
-  const { completedChores, chores } = useChore();
-  const { currentUser } = useUser();
+  const { completedChores, chores, deleteCompletedChore } = useChore();
+  const { currentUser, updateUser } = useUser();
   const [timeFilter, setTimeFilter] = useState<"all" | "week" | "month">("week");
   
   if (!currentUser) return null;
@@ -75,6 +76,22 @@ export default function HistoryList() {
   Object.entries(choresByDate).forEach(([date, dailyChores]) => {
     pointsByDate[date] = dailyChores.reduce((sum, cc) => sum + cc.pointsEarned, 0);
   });
+
+  const handleDeleteCompletedChore = async (completedChore: CompletedChore) => {
+    try {
+      await deleteCompletedChore(completedChore.id);
+      if (currentUser) {
+        updateUser({
+          ...currentUser,
+          points: currentUser.points - completedChore.pointsEarned
+        });
+      }
+      toast.success("Chore completion removed");
+    } catch (error) {
+      console.error('Error deleting completed chore:', error);
+      toast.error("Failed to remove chore completion");
+    }
+  };
 
   return (
     <Card>
@@ -141,9 +158,20 @@ export default function HistoryList() {
                           })}
                         </p>
                       </div>
-                      <span className="text-sm font-medium text-green-600">
-                        +{cc.pointsEarned}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-green-600">
+                          +{cc.pointsEarned}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-gray-400 hover:text-red-500 hover:bg-red-50"
+                          onClick={() => handleDeleteCompletedChore(cc)}
+                          aria-label="Remove completion"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>

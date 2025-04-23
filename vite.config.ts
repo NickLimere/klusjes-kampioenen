@@ -17,6 +17,15 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      "react-native": "react-native-web",
+      // Add platform-specific extensions
+      ".ios.js": ".web.js",
+      ".android.js": ".web.js",
     },
+    extensions: [".web.js", ".js", ".ts", ".tsx"],
+  },
+  define: {
+    // Required for react-native-web
+    __DEV__: JSON.stringify(mode === "development"),
   },
 }));
