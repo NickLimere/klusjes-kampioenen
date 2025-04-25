@@ -44,14 +44,10 @@ jobs:
           cache: ${{ steps.detect-package-manager.outputs.manager }}
       - name: Setup Pages
         uses: actions/configure-pages@v4
-      - name: Create Pages site
-        uses: actions/create-pages-site@v1
-        with:
-          branch: v1.1-ipad
       - name: Install dependencies
         run: ${{ steps.detect-package-manager.outputs.manager }} ${{ steps.detect-package-manager.outputs.command }}
       - name: Build with Vite
-        run: ${{ steps.detect-package-manager.outputs.runner }} vite build
+        run: ${{ steps.detect-package-manager.outputs.runner }} vite build --base=/klusjes-kampioenen/
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
