@@ -45,9 +45,15 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v4
       - name: Install dependencies
-        run: ${{ steps.detect-package-manager.outputs.manager }} ${{ steps.detect-package-manager.outputs.command }}
+        run: |
+          ${{ steps.detect-package-manager.outputs.manager }} ${{ steps.detect-package-manager.outputs.command }}
+          echo "Installed dependencies:"
+          ${{ steps.detect-package-manager.outputs.manager }} list --depth=0
       - name: Build with Vite
-        run: ${{ steps.detect-package-manager.outputs.runner }} vite build --base=/klusjes-kampioenen/
+        run: |
+          echo "Building with Vite..."
+          ${{ steps.detect-package-manager.outputs.runner }} vite build --base=/klusjes-kampioenen/ --debug
+          echo "Build completed"
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
