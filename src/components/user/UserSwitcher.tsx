@@ -36,7 +36,14 @@ export default function UserSwitcher() {
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel>Family Members</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {users.map((user) => (
+        {[...users]
+          .sort((a, b) => {
+            const userOrder = ['Mia', 'Emma', 'Mama', 'Papa'];
+            const aIndex = userOrder.indexOf(a.name);
+            const bIndex = userOrder.indexOf(b.name);
+            return aIndex - bIndex;
+          })
+          .map((user) => (
           <DropdownMenuItem
             key={user.id}
             className="cursor-pointer"

@@ -59,13 +59,15 @@ export default function AdminChores() {
   });
   const [editingChore, setEditingChore] = useState<Chore | null>(null);
   
-  // Filter out admin users and log the results
-  const childUsers = users.filter(user => {
-    console.log('Checking user:', { id: user.id, name: user.name, role: user.role });
-    return user.role !== "admin" && user.id; // Also ensure user has an ID
-  });
-  
-  console.log('Filtered child users:', childUsers.map(user => ({ id: user.id, name: user.name })));
+  // Filter out admin users and sort in specific order
+  const userOrder = ['Mia', 'Emma', 'Mama', 'Papa'];
+  const childUsers = users
+    .filter(user => user.role !== "admin" && user.id)
+    .sort((a, b) => {
+      const aIndex = userOrder.indexOf(a.name);
+      const bIndex = userOrder.indexOf(b.name);
+      return aIndex - bIndex;
+    });
   
   // Create a test chore if none exist
   useEffect(() => {
@@ -125,7 +127,7 @@ export default function AdminChores() {
       description: newChore.description || "",
       pointValue: newChore.pointValue || 5,
       assignedTo: validAssignedTo,
-      recurrence: (newChore.recurrence || "daily") as "daily" | "weekly",
+      recurrence: (newChore.recurrence || "daily") as "daily" | "weekly" | "one-time",
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now()
     };
@@ -355,7 +357,7 @@ export default function AdminChores() {
                 <Input
                   id="points"
                   type="number"
-                  min="1"
+                  min="0"
                   value={newChore.pointValue || 5}
                   onChange={(e) =>
                     setNewChore({
@@ -488,7 +490,7 @@ export default function AdminChores() {
                   <Input
                     id="edit-points"
                     type="number"
-                    min="1"
+                    min="0"
                     value={editingChore.pointValue}
                     onChange={(e) =>
                       setEditingChore({
@@ -506,7 +508,7 @@ export default function AdminChores() {
                     onValueChange={(value) =>
                       setEditingChore({
                         ...editingChore,
-                        recurrence: value as "daily" | "weekly",
+                        recurrence: value as "daily" | "weekly" | "one-time",
                       })
                     }
                   >
@@ -516,6 +518,7 @@ export default function AdminChores() {
                     <SelectContent>
                       <SelectItem value="daily">Daily</SelectItem>
                       <SelectItem value="weekly">Weekly</SelectItem>
+                      <SelectItem value="one-time">One-time</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

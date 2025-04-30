@@ -18,7 +18,7 @@ export interface Chore {
   description?: string;
   pointValue: number;
   assignedTo: string[];
-  recurrence: 'daily' | 'weekly';
+  recurrence: 'daily' | 'weekly' | 'one-time';
   dueDate?: Timestamp;
   createdAt: Timestamp;
   updatedAt: Timestamp;

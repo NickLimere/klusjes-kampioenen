@@ -17,6 +17,36 @@ export default function ChoreList() {
   const userChores = getUserChores(currentUser.id);
   const today = new Date().toLocaleDateString();
 
+  // Filter chores based on recurrence and completion
+  const availableChores = userChores.filter(chore => {
+    // For one-time chores, only show if never completed
+    if (chore.recurrence === 'one-time') {
+      return !completedChores.some(cc => cc.choreId === chore.id);
+    }
+    
+    // For daily chores, only show if not completed today
+    if (chore.recurrence === 'daily') {
+      return !completedChores.some(cc => 
+        cc.choreId === chore.id && 
+        new Date(cc.completedAt).toLocaleDateString() === today
+      );
+    }
+    
+    // For weekly chores, only show if not completed this week
+    if (chore.recurrence === 'weekly') {
+      const startOfWeek = new Date();
+      startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+      startOfWeek.setHours(0, 0, 0, 0);
+      
+      return !completedChores.some(cc => 
+        cc.choreId === chore.id && 
+        new Date(cc.completedAt) >= startOfWeek
+      );
+    }
+    
+    return true;
+  });
+
   // Check which chores were completed today
   const userCompletedToday = completedChores.filter(
     (cc) => 
@@ -24,19 +54,25 @@ export default function ChoreList() {
       new Date(cc.completedAt).toLocaleDateString() === today
   ).map(cc => cc.choreId);
 
-  const handleCompleteChore = (chore: Chore) => {
+  const handleCompleteChore = async (chore: Chore) => {
     // Add to local state for immediate feedback
     setCompletedToday([...completedToday, chore.id]);
     
-    // Record the completion
-    completeChore(chore.id, currentUser.id);
-    
-    // Update user points
-    if (currentUser) {
-      updateUser({
-        ...currentUser,
-        points: currentUser.points + chore.pointValue
-      });
+    try {
+      // Record the completion
+      await completeChore(chore.id, currentUser.id);
+      
+      // Update user points
+      if (currentUser) {
+        await updateUser({
+          ...currentUser,
+          points: currentUser.points + chore.pointValue
+        });
+      }
+    } catch (error) {
+      console.error('Error completing chore:', error);
+      // Remove from local state if there was an error
+      setCompletedToday(prev => prev.filter(id => id !== chore.id));
     }
   };
 
@@ -49,13 +85,13 @@ export default function ChoreList() {
     <div className="bg-white rounded-2xl shadow-card p-4 mb-6">
       <h2 className="text-xl font-bold mb-4">Today's Chores</h2>
       
-      {userChores.length === 0 ? (
+      {availableChores.length === 0 ? (
         <div className="text-center py-8">
           <p className="text-gray-500">No chores assigned yet.</p>
         </div>
       ) : (
         <div className="space-y-3">
-          {userChores.map((chore) => {
+          {availableChores.map((chore) => {
             const completed = isChoreCompleted(chore.id);
             
             return (

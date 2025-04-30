@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
-import { getUsers } from "@/lib/db-service";
+import { getUsers, updateUser as updateUserInDb } from "@/lib/db-service";
 import { Timestamp } from "firebase/firestore";
 
 // Define types for our user data
@@ -43,10 +43,19 @@ export function UserProvider({ children }: { children: ReactNode }) {
           createdAt: (user.createdAt as Timestamp).toDate(),
           updatedAt: (user.updatedAt as Timestamp).toDate()
         }));
-        setUsers(convertedUsers);
-        // Set the first user as current user if none is set
-        if (!currentUser && convertedUsers.length > 0) {
-          setCurrentUser(convertedUsers[0]);
+        // Sort users in the specified order
+        const userOrder = ['Mia', 'Emma', 'Mama', 'Papa'];
+        const sortedUsers = [...convertedUsers].sort((a, b) => {
+          const aIndex = userOrder.indexOf(a.name);
+          const bIndex = userOrder.indexOf(b.name);
+          return aIndex - bIndex;
+        });
+
+        setUsers(sortedUsers);
+        // Set Mia as the default user if no user is selected
+        if (!currentUser && sortedUsers.length > 0) {
+          const defaultUser = sortedUsers.find(user => user.name === 'Mia') || sortedUsers[0];
+          setCurrentUser(defaultUser);
         }
       } catch (error) {
         console.error('Error fetching users:', error);
@@ -62,14 +71,30 @@ export function UserProvider({ children }: { children: ReactNode }) {
     setUsers((prevUsers) => [...prevUsers, user]);
   };
 
-  const updateUser = (updatedUser: User) => {
-    setUsers((prevUsers) =>
-      prevUsers.map((user) =>
-        user.id === updatedUser.id ? updatedUser : user
-      )
-    );
-    if (currentUser?.id === updatedUser.id) {
-      setCurrentUser(updatedUser);
+  const updateUser = async (updatedUser: User) => {
+    try {
+      // Convert dates to Firestore Timestamps for database update
+      const userForDb = {
+        ...updatedUser,
+        createdAt: Timestamp.fromDate(updatedUser.createdAt),
+        updatedAt: Timestamp.fromDate(updatedUser.updatedAt)
+      };
+
+      // Update in Firestore
+      await updateUserInDb(updatedUser.id, userForDb);
+      
+      // Update local state
+      setUsers((prevUsers) =>
+        prevUsers.map((user) =>
+          user.id === updatedUser.id ? updatedUser : user
+        )
+      );
+      if (currentUser?.id === updatedUser.id) {
+        setCurrentUser(updatedUser);
+      }
+    } catch (error) {
+      console.error('Error updating user:', error);
+      throw error; // Re-throw to handle in the component
     }
   };
 
