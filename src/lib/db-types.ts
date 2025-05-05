@@ -39,8 +39,6 @@ export interface ChoreAssignment {
   id: string;
   choreInstanceId: string;
   userId: string;
-  completed: boolean;
-  completedAt?: Timestamp;
   pointsEarned?: number;
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -48,7 +46,7 @@ export interface ChoreAssignment {
 
 export interface CompletedChore {
   id: string;
-  choreId: string;
+  choreInstanceId: string;
   userId: string;
   completedAt: Timestamp;
   pointsEarned: number;

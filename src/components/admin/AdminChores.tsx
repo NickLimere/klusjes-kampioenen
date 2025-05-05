@@ -77,6 +77,16 @@ export default function AdminChores() {
       setAssignmentsByChore(grouped);
     })();
   }, [chores]);
+
+  // --- NEW: Group assignments by choreInstanceId for correct table rendering ---
+  const allAssignments = Object.values(assignmentsByChore).flat();
+  const assignmentsByInstance = allAssignments.reduce((acc, assignment) => {
+    const instanceId = assignment.choreInstanceId;
+    if (!acc[instanceId]) acc[instanceId] = [];
+    acc[instanceId].push(assignment);
+    return acc;
+  }, {} as Record<string, ChoreAssignmentWithInstance[]>);
+
   
   const resetChoreForm = () => {
     setNewChore({
@@ -252,11 +262,11 @@ export default function AdminChores() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {Object.entries(assignmentsByChore).map(([choreId, assignments]) => {
+            {Object.entries(assignmentsByInstance).map(([instanceId, assignments]) => {
               const choreInstance = assignments[0]?.choreInstance;
               if (!choreInstance) return null;
               return (
-                <TableRow key={choreId}>
+                <TableRow key={instanceId}>
                   <TableCell className="font-medium">{choreInstance.title}</TableCell>
                   <TableCell>{choreInstance.pointValue}</TableCell>
                   <TableCell className="capitalize">{choreInstance.recurrence}</TableCell>

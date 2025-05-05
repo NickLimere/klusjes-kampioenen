@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { CheckCircle2, Circle } from "lucide-react";
 import { useChore, ChoreAssignmentWithInstance, ChoreInstance } from "@/contexts/ChoreContext";
 
@@ -7,43 +7,52 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export default function ChoreList() {
-  const { getUserAssignments, completeAssignment } = useChore();
+  const { getUserAssignments, completeAssignment, getUserCompletedChores } = useChore();
   const { currentUser, updateUser } = useUser();
   const [assignments, setAssignments] = useState<ChoreAssignmentWithInstance[]>([]);
   const [completing, setCompleting] = useState<string[]>([]);
+  const [completedChores, setCompletedChores] = useState<any[]>([]);
 
-  if (!currentUser) return null;
-
-  // Load user assignments on mount
-  React.useEffect(() => {
+  useEffect(() => {
+    if (!currentUser) return;
     (async () => {
       const data = await getUserAssignments(currentUser.id);
-      console.log('[ChoreList useEffect] Loaded assignments:', data);
       setAssignments(data);
+      const completions = await getUserCompletedChores(currentUser.id);
+      setCompletedChores(completions);
     })();
-  }, [currentUser.id, getUserAssignments]);
+  }, [currentUser, getUserAssignments, getUserCompletedChores]);
+
+  if (!currentUser) return null;
 
   const today = new Date();
   const todayStr = today.toLocaleDateString();
 
-  // Filter assignments for active (incomplete) chores
-  const availableAssignments = assignments.filter(a => {
-    if (!a.choreInstance) return false;
-    if (a.completed) return false;
-    // For one-time chores, only show if not completed
-    if (a.choreInstance.recurrence === 'one-time') return !a.completed;
-    // For daily chores, only show if not completed today
-    if (a.choreInstance.recurrence === 'daily') {
-      return !a.completedAt || new Date(a.completedAt).toLocaleDateString() !== todayStr;
+  // Helper to check if a chore assignment is completed for the relevant period
+  const isAssignmentCompleted = (assignment: ChoreAssignmentWithInstance) => {
+    if (!assignment.choreInstance) return false;
+    const instance = assignment.choreInstance;
+    // Find a completedChore for this user/choreInstance and relevant period
+    const completions = completedChores.filter(cc => cc.choreInstanceId === assignment.choreInstanceId && cc.userId === assignment.userId);
+    if (instance.recurrence === 'one-time') {
+      return completions.length > 0 || completing.includes(assignment.id);
     }
-    // For weekly chores, only show if not completed this week
-    if (a.choreInstance.recurrence === 'weekly') {
+    if (instance.recurrence === 'daily') {
+      return completions.some(cc => new Date(cc.completedAt).toLocaleDateString() === todayStr) || completing.includes(assignment.id);
+    }
+    if (instance.recurrence === 'weekly') {
       const startOfWeek = new Date(today);
       startOfWeek.setDate(today.getDate() - today.getDay());
       startOfWeek.setHours(0, 0, 0, 0);
-      return !a.completedAt || new Date(a.completedAt) < startOfWeek;
+      return completions.some(cc => new Date(cc.completedAt) >= startOfWeek) || completing.includes(assignment.id);
     }
-    return true;
+    return false;
+  };
+
+  // Filter assignments for active (incomplete) chores
+  const availableAssignments = assignments.filter(a => {
+    if (!a.choreInstance) return false;
+    return !isAssignmentCompleted(a);
   });
 
   const handleCompleteAssignment = async (assignment: ChoreAssignmentWithInstance) => {
@@ -68,9 +77,7 @@ export default function ChoreList() {
     }
   };
 
-  const isAssignmentCompleted = (assignment: ChoreAssignmentWithInstance) => {
-    return assignment.completed || completing.includes(assignment.id);
-  };
+
 
   return (
     <div className="bg-white rounded-2xl shadow-card p-4 mb-6">

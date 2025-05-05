@@ -21,7 +21,7 @@ import { Calendar, CheckCircle, Trash2 } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 
 export default function HistoryList() {
-  const { completedChores, chores, deleteCompletedChore } = useChore();
+  const { completedChores, chores, choreInstances, deleteCompletedChore } = useChore();
   const { currentUser, updateUser } = useUser();
   const [timeFilter, setTimeFilter] = useState<"all" | "week" | "month">("week");
   
@@ -62,11 +62,11 @@ export default function HistoryList() {
       choresByDate[dateStr] = [];
     }
     
-    const choreDetails = chores.find(c => c.id === cc.choreId);
+    const choreInstance = choreInstances.find(ci => ci.id === cc.choreInstanceId);
     
     choresByDate[dateStr].push({
       ...cc,
-      choreDetails
+      choreDetails: choreInstance
     });
   });
   

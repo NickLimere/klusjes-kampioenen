@@ -38,7 +38,7 @@ export default function HistoryCalendar() {
     acc[dateStr].points += cc.pointsEarned;
     
     // Find the chore details
-    const choreDetails = chores.find(c => c.id === cc.choreId);
+    const choreDetails = chores.find(c => c.id === cc.choreInstanceId);
     if (choreDetails) {
       acc[dateStr].chores.push({
         ...cc,

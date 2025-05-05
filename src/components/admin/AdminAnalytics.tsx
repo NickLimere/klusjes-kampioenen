@@ -95,7 +95,7 @@ export default function AdminAnalytics() {
     }
     
     // Count completions for this chore
-    const completions = filteredCompletedChores.filter(cc => cc.choreId === chore.id).length;
+    const completions = filteredCompletedChores.filter(cc => cc.choreInstanceId === chore.id).length;
     acc[category].value += completions;
     
     return acc;
@@ -109,7 +109,7 @@ export default function AdminAnalytics() {
     
     const rows = filteredCompletedChores.map(cc => {
       const user = users.find(u => u.id === cc.userId);
-      const chore = chores.find(c => c.id === cc.choreId);
+      const chore = chores.find(c => c.id === cc.choreInstanceId);
       
       return [
         user?.name || "Unknown",

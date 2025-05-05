@@ -141,7 +141,7 @@ export const assignChoreInstance = async (
   const newAssignment = {
     choreInstanceId,
     userId,
-    completed: false,
+
     createdAt: Timestamp.now(),
     updatedAt: Timestamp.now(),
     pointsEarned: pointsEarned || 0
@@ -190,13 +190,8 @@ export const getAllChoreAssignments = async (): Promise<(ChoreAssignment & { cho
 };
 
 export const completeAssignment = async (assignmentId: string, pointsEarned?: number): Promise<void> => {
-  const docRef = doc(choreAssignmentsCollection, assignmentId);
-  await updateDoc(docRef, {
-    completed: true,
-    completedAt: Timestamp.now(),
-    updatedAt: Timestamp.now(),
-    ...(typeof pointsEarned === 'number' ? { pointsEarned } : {})
-  });
+  // No longer update assignment; all completions tracked in completedChores
+  return;
 };
 
 // Completed Chore operations
@@ -224,11 +219,11 @@ export const getUserCompletedChores = async (userId: string): Promise<CompletedC
 };
 
 export const getChoreCompletionHistory = async (
-  choreId: string,
+  choreInstanceId: string,
   startDate?: Date,
   endDate?: Date
 ): Promise<CompletedChore[]> => {
-  let q = query(completedChoresCollection, where('choreId', '==', choreId));
+  let q = query(completedChoresCollection, where('choreInstanceId', '==', choreInstanceId));
   
   if (startDate && endDate) {
     q = query(q, 
