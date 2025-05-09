@@ -17,10 +17,9 @@ import { useUser } from "@/contexts/UserContext";
 import { Timestamp } from "firebase/firestore";
 
 // Define types for our chore data
-export interface Chore extends Omit<DbChore, 'createdAt' | 'updatedAt' | 'dueDate'> {
+export interface Chore extends Omit<DbChore, 'createdAt' | 'updatedAt'> {
   createdAt: Date;
   updatedAt: Date;
-  dueDate?: Timestamp;
 }
 
 export interface CompletedChore extends Omit<DbCompletedChore, 'completedAt' | 'createdAt' | 'updatedAt'> {
@@ -29,22 +28,18 @@ export interface CompletedChore extends Omit<DbCompletedChore, 'completedAt' | '
   updatedAt: Date;
 }
 
-
 import type { ChoreInstance as DbChoreInstance } from "@/lib/db-types";
 
-// Locally override ChoreInstance to allow dueDate as Date | Timestamp | undefined
-export interface ChoreInstance extends Omit<DbChoreInstance, 'createdAt' | 'updatedAt' | 'dueDate'> {
-
+// Locally override ChoreInstance to allow  as Date | Timestamp | undefined
+export interface ChoreInstance extends Omit<DbChoreInstance, 'createdAt' | 'updatedAt'> {
   createdAt?: Date | Timestamp;
   updatedAt?: Date | Timestamp;
-  dueDate?: Timestamp;
 }
 
 export interface ChoreAssignmentWithInstance {
   id: string;
   choreInstanceId: string;
   userId: string;
-
 
   pointsEarned?: number;
   createdAt: Date;
@@ -98,9 +93,6 @@ export function ChoreProvider({ children }: { children: ReactNode }) {
           ...chore,
           createdAt: (chore.createdAt as Timestamp).toDate(),
           updatedAt: (chore.updatedAt as Timestamp).toDate(),
-          dueDate: (chore.dueDate && (chore.dueDate as Timestamp).seconds !== undefined)
-            ? (chore.dueDate as Timestamp)
-            : undefined,
         })));
 
       } catch (error) {
@@ -119,21 +111,12 @@ export function ChoreProvider({ children }: { children: ReactNode }) {
       if (currentUser) {
         try {
           const fetchedChores = await dbGetUserCompletedChores(currentUser.id);
-          const convertedChores = fetchedChores.map(chore => {
-            // Only check for completedAt since that's the only required timestamp
-            if (!chore.completedAt) {
-              console.error('Missing completedAt field in completed chore:', chore);
-              return null;
-            }
-            
-            return {
-              ...chore,
-              completedAt: (chore.completedAt as Timestamp).toDate(),
-              // Use completedAt for createdAt and updatedAt if they don't exist
-              createdAt: chore.createdAt ? (chore.createdAt as Timestamp).toDate() : (chore.completedAt as Timestamp).toDate(),
-              updatedAt: chore.updatedAt ? (chore.updatedAt as Timestamp).toDate() : (chore.completedAt as Timestamp).toDate()
-            };
-          }).filter((chore): chore is CompletedChore => chore !== null);
+          const convertedChores = fetchedChores.map(chore => ({
+            ...chore,
+            completedAt: (chore.completedAt as Timestamp).toDate(),
+            createdAt: (chore.createdAt as Timestamp).toDate(),
+            updatedAt: (chore.updatedAt as Timestamp).toDate(),
+          }));
           
           // Ensure unique chores by ID
           setCompletedChores(prev => {
@@ -198,7 +181,6 @@ export function ChoreProvider({ children }: { children: ReactNode }) {
     return assignmentIds;
   };
 
-
   const updateChore = async (id: string, chore: Partial<DbChore>) => {
     await dbUpdateChore(id, chore);
     setChores(prev =>
@@ -207,7 +189,6 @@ export function ChoreProvider({ children }: { children: ReactNode }) {
         ...chore,
         updatedAt: new Date(),
         createdAt: c.createdAt instanceof Timestamp ? c.createdAt.toDate() : c.createdAt,
-        dueDate: chore.dueDate ? (chore.dueDate as Timestamp).toDate() : c.dueDate
       } : c)
     );
   };
@@ -251,31 +232,27 @@ export function ChoreProvider({ children }: { children: ReactNode }) {
   };
 
   const getUserAssignments = async (userId: string): Promise<ChoreAssignmentWithInstance[]> => {
-  const assignments = await dbGetUserChoreAssignments(userId);
-  // Convert Firestore timestamps to JS Dates
-  return assignments.map(a => ({
-    ...a,
-    createdAt: a.createdAt
-      ? (typeof a.createdAt.toDate === 'function' ? a.createdAt.toDate() : (a.createdAt instanceof Date ? a.createdAt : undefined))
-      : undefined,
-    updatedAt: a.updatedAt
-      ? (typeof a.updatedAt.toDate === 'function' ? a.updatedAt.toDate() : (a.updatedAt instanceof Date ? a.updatedAt : undefined))
-      : undefined,
-    completedAt: a.completedAt
-      ? (typeof a.completedAt.toDate === 'function' ? a.completedAt.toDate() : (a.completedAt instanceof Date ? a.completedAt : undefined))
-      : undefined,
-    choreInstance: a.choreInstance
-      ? {
-          ...a.choreInstance,
-          createdAt: typeof a.choreInstance.createdAt?.toDate === 'function' ? a.choreInstance.createdAt.toDate() : (a.choreInstance.createdAt instanceof Date ? a.choreInstance.createdAt : new Date()),
-          updatedAt: a.choreInstance.updatedAt
-            ? (typeof a.choreInstance.updatedAt.toDate === 'function' ? a.choreInstance.updatedAt.toDate() : (a.choreInstance.updatedAt instanceof Date ? a.choreInstance.updatedAt : new Date()))
-            : new Date(),
-          
-        }
-      : null
-  }));
-};
+    const assignments = await dbGetUserChoreAssignments(userId);
+    // Convert Firestore timestamps to JS Dates
+    return assignments.map(a => ({
+      ...a,
+      createdAt: a.createdAt
+        ? (typeof a.createdAt.toDate === 'function' ? a.createdAt.toDate() : (a.createdAt instanceof Date ? a.createdAt : undefined))
+        : undefined,
+      updatedAt: a.updatedAt
+        ? (typeof a.updatedAt.toDate === 'function' ? a.updatedAt.toDate() : (a.updatedAt instanceof Date ? a.updatedAt : undefined))
+        : undefined,
+      choreInstance: a.choreInstance
+        ? {
+            ...a.choreInstance,
+            createdAt: typeof a.choreInstance.createdAt?.toDate === 'function' ? a.choreInstance.createdAt.toDate() : (a.choreInstance.createdAt instanceof Date ? a.choreInstance.createdAt : new Date()),
+            updatedAt: a.choreInstance.updatedAt
+              ? (typeof a.choreInstance.updatedAt.toDate === 'function' ? a.choreInstance.updatedAt.toDate() : (a.choreInstance.updatedAt instanceof Date ? a.choreInstance.updatedAt : new Date()))
+              : new Date(),
+          }
+        : null
+    }));
+  };
 
   const getUserCompletedChores = async (userId: string) => {
     const fetchedChores = await dbGetUserCompletedChores(userId);
@@ -327,10 +304,6 @@ export function ChoreProvider({ children }: { children: ReactNode }) {
               updatedAt: a.choreInstance.updatedAt
                 ? (typeof a.choreInstance.updatedAt.toDate === 'function' ? a.choreInstance.updatedAt.toDate() : (a.choreInstance.updatedAt instanceof Date ? a.choreInstance.updatedAt : new Date()))
                 : new Date(),
-              dueDate: a.choreInstance.dueDate && (a.choreInstance.dueDate as Timestamp).seconds !== undefined
-                ? (a.choreInstance.dueDate as Timestamp)
-                : undefined,
-              description: a.choreInstance.description || '',
             }
           : {
               id: '',
@@ -340,8 +313,6 @@ export function ChoreProvider({ children }: { children: ReactNode }) {
               // choreInstanceId already present
               createdAt: new Date(),
               updatedAt: new Date(),
-              dueDate: undefined,
-              description: '',
             }
       };
       if (!grouped[instanceId]) grouped[instanceId] = [];

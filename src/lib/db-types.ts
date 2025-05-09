@@ -19,7 +19,6 @@ export interface Chore {
   pointValue: number;
   assignedTo: string[];
   recurrence: 'daily' | 'weekly' | 'one-time';
-  dueDate?: Timestamp;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -30,7 +29,6 @@ export interface ChoreInstance {
   description?: string;
   pointValue: number;
   recurrence: 'daily' | 'weekly' | 'one-time';
-  dueDate?: Timestamp;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -71,4 +69,4 @@ export interface RedeemedReward {
   redeemedAt: Timestamp;
   status: 'pending' | 'approved' | 'denied';
   updatedAt: Timestamp;
-} 
+}

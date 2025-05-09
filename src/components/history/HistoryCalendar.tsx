@@ -83,21 +83,6 @@ export default function HistoryCalendar() {
                 borderRadius: "0.25rem",
               },
             }}
-            components={{
-              DayContent: (props) => {
-                const dateStr = props.date.toDateString();
-                const hasCompleted = completedDatesMap[dateStr];
-                
-                return (
-                  <div className="relative h-full w-full p-1">
-                    <span>{props.date.getDate()}</span>
-                    {hasCompleted && (
-                      <span className="absolute bottom-0 right-0 flex h-2 w-2 rounded-full bg-joy-secondary" />
-                    )}
-                  </div>
-                );
-              },
-            }}
           />
         </CardContent>
       </Card>
