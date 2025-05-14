@@ -1,22 +1,25 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import { 
   getChores, 
-  createChore as dbCreateChore, 
+  createChoreInstance as dbCreateChoreInstance, 
   updateChore as dbUpdateChore, 
   deleteChore as dbDeleteChore,
-  completeChore as dbCompleteChore,
+  assignChoreInstance as dbAssignChoreInstance,
+  getUserChoreAssignments as dbGetUserChoreAssignments,
+  completeAssignment as dbCompleteAssignment,
   getUserCompletedChores as dbGetUserCompletedChores,
-  deleteCompletedChore as dbDeleteCompletedChore
+  deleteCompletedChore as dbDeleteCompletedChore,
+  completeChore
 } from "@/lib/db-service";
-import { Timestamp } from "firebase/firestore";
+
 import type { Chore as DbChore, CompletedChore as DbCompletedChore } from "@/lib/db-types";
 import { useUser } from "@/contexts/UserContext";
+import { Timestamp } from "firebase/firestore";
 
 // Define types for our chore data
-export interface Chore extends Omit<DbChore, 'createdAt' | 'updatedAt' | 'dueDate'> {
+export interface Chore extends Omit<DbChore, 'createdAt' | 'updatedAt'> {
   createdAt: Date;
   updatedAt: Date;
-  dueDate?: Date;
 }
 
 export interface CompletedChore extends Omit<DbCompletedChore, 'completedAt' | 'createdAt' | 'updatedAt'> {
@@ -25,16 +28,37 @@ export interface CompletedChore extends Omit<DbCompletedChore, 'completedAt' | '
   updatedAt: Date;
 }
 
+import type { ChoreInstance as DbChoreInstance } from "@/lib/db-types";
+
+// Locally override ChoreInstance to allow  as Date | Timestamp | undefined
+export interface ChoreInstance extends Omit<DbChoreInstance, 'createdAt' | 'updatedAt'> {
+  createdAt?: Date | Timestamp;
+  updatedAt?: Date | Timestamp;
+}
+
+export interface ChoreAssignmentWithInstance {
+  id: string;
+  choreInstanceId: string;
+  userId: string;
+
+  pointsEarned?: number;
+  createdAt: Date;
+  updatedAt: Date;
+  choreInstance: ChoreInstance | null;
+}
+
 export interface ChoreContextType {
   chores: Chore[];
+  choreInstances: ChoreInstance[];
   completedChores: CompletedChore[];
-  addChore: (chore: Omit<DbChore, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>;
+  addChore: (chore: Omit<DbChore, 'id' | 'createdAt' | 'updatedAt'>, assignedUserIds: string[]) => Promise<string[]>;
   updateChore: (id: string, chore: Partial<DbChore>) => Promise<void>;
   deleteChore: (id: string) => Promise<void>;
-  completeChore: (choreId: string, userId: string) => Promise<string>;
+  completeAssignment: (assignmentId: string, pointsEarned?: number) => Promise<void>;
   deleteCompletedChore: (id: string) => Promise<void>;
-  getUserChores: (userId: string) => Chore[];
+  getUserAssignments: (userId: string) => Promise<ChoreAssignmentWithInstance[]>;
   getUserCompletedChores: (userId: string) => Promise<CompletedChore[]>;
+  getAssignmentsGroupedByChore: () => Promise<Record<string, ChoreAssignmentWithInstance[]>>;
 }
 
 // Create the context
@@ -50,8 +74,12 @@ export function useChore() {
 }
 
 // Context provider component
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+
 export function ChoreProvider({ children }: { children: ReactNode }) {
   const [chores, setChores] = useState<Chore[]>([]);
+  const [choreInstances, setChoreInstances] = useState<ChoreInstance[]>([]);
   const [completedChores, setCompletedChores] = useState<CompletedChore[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { currentUser } = useUser();
@@ -65,8 +93,8 @@ export function ChoreProvider({ children }: { children: ReactNode }) {
           ...chore,
           createdAt: (chore.createdAt as Timestamp).toDate(),
           updatedAt: (chore.updatedAt as Timestamp).toDate(),
-          dueDate: chore.dueDate ? (chore.dueDate as Timestamp).toDate() : undefined
         })));
+
       } catch (error) {
         console.error('Error loading chores:', error);
       } finally {
@@ -83,21 +111,12 @@ export function ChoreProvider({ children }: { children: ReactNode }) {
       if (currentUser) {
         try {
           const fetchedChores = await dbGetUserCompletedChores(currentUser.id);
-          const convertedChores = fetchedChores.map(chore => {
-            // Only check for completedAt since that's the only required timestamp
-            if (!chore.completedAt) {
-              console.error('Missing completedAt field in completed chore:', chore);
-              return null;
-            }
-            
-            return {
-              ...chore,
-              completedAt: (chore.completedAt as Timestamp).toDate(),
-              // Use completedAt for createdAt and updatedAt if they don't exist
-              createdAt: chore.createdAt ? (chore.createdAt as Timestamp).toDate() : (chore.completedAt as Timestamp).toDate(),
-              updatedAt: chore.updatedAt ? (chore.updatedAt as Timestamp).toDate() : (chore.completedAt as Timestamp).toDate()
-            };
-          }).filter((chore): chore is CompletedChore => chore !== null);
+          const convertedChores = fetchedChores.map(chore => ({
+            ...chore,
+            completedAt: (chore.completedAt as Timestamp).toDate(),
+            createdAt: (chore.createdAt as Timestamp).toDate(),
+            updatedAt: (chore.updatedAt as Timestamp).toDate(),
+          }));
           
           // Ensure unique chores by ID
           setCompletedChores(prev => {
@@ -117,22 +136,49 @@ export function ChoreProvider({ children }: { children: ReactNode }) {
     loadCompletedChores();
   }, [currentUser]);
 
-  const addChore = async (chore: Omit<DbChore, 'id' | 'createdAt' | 'updatedAt'>) => {
-    const dbChore = {
-      ...chore,
-      createdAt: Timestamp.now(),
-      updatedAt: Timestamp.now()
+  useEffect(() => {
+    const fetchChoreInstances = async () => {
+      const querySnapshot = await getDocs(collection(db, 'choreInstances'));
+      const instances = querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as ChoreInstance));
+      setChoreInstances(instances);
     };
-    const id = await dbCreateChore(dbChore);
-    const newChore: Chore = {
+    fetchChoreInstances();
+  }, []);
+
+  const addChore = async (chore: Omit<DbChore, 'id' | 'createdAt' | 'updatedAt'>, assignedUserIds?: string[]) => {
+    // Fallback: try to use assignedTo from chore if assignedUserIds not provided
+    let userIds: string[] | undefined = assignedUserIds;
+    if (!userIds || !Array.isArray(userIds)) {
+      if (Array.isArray((chore as any).assignedTo)) {
+        userIds = (chore as any).assignedTo;
+      } else {
+        throw new Error("addChore: assignedUserIds must be an array of user IDs");
+      }
+    }
+    if (!userIds || userIds.length === 0) {
+      throw new Error("addChore: No users assigned to this chore");
+    }
+
+    // 1. Create a single chore instance
+    const instanceData = {
       ...chore,
-      id,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      dueDate: chore.dueDate ? (chore.dueDate as Timestamp).toDate() : undefined
+      recurrence: chore.recurrence,
+      pointValue: chore.pointValue,
+      title: chore.title,
+      description: chore.description,
+      // Add any other fields needed for the instance
     };
-    setChores(prev => [...prev, newChore]);
-    return id;
+    const instanceId = await dbCreateChoreInstance(instanceData);
+
+    // 2. For each assigned user, create a chore assignment for this instance
+    const assignmentIds: string[] = [];
+    for (const userId of userIds) {
+      const assignmentId = await dbAssignChoreInstance(instanceId, userId);
+      assignmentIds.push(assignmentId);
+    }
+
+    // 3. Optionally, update local state if needed
+    return assignmentIds;
   };
 
   const updateChore = async (id: string, chore: Partial<DbChore>) => {
@@ -143,7 +189,6 @@ export function ChoreProvider({ children }: { children: ReactNode }) {
         ...chore,
         updatedAt: new Date(),
         createdAt: c.createdAt instanceof Timestamp ? c.createdAt.toDate() : c.createdAt,
-        dueDate: chore.dueDate ? (chore.dueDate as Timestamp).toDate() : c.dueDate
       } : c)
     );
   };
@@ -153,38 +198,32 @@ export function ChoreProvider({ children }: { children: ReactNode }) {
     setChores(prev => prev.filter(c => c.id !== id));
   };
 
-  const completeChore = async (choreId: string, userId: string) => {
-    const chore = chores.find(c => c.id === choreId);
-    if (!chore) throw new Error('Chore not found');
-
+  const completeAssignment = async (assignmentId: string, pointsEarned?: number) => {
+    // Fetch assignment details to create CompletedChore
+    const assignments = await dbGetUserChoreAssignments(currentUser?.id || "");
+    const assignment = assignments.find(a => a.id === assignmentId);
+    if (!assignment) {
+      console.error("Assignment not found for completion record");
+      return;
+    }
+    // Fetch choreInstance to get the choreInstanceId
+    const choreInstance = assignment.choreInstance;
+    if (!choreInstance) {
+      console.error("ChoreInstance not found for assignment");
+      return;
+    }
+    // Compose CompletedChore record
     const now = Timestamp.now();
-    const id = await dbCompleteChore({
-      choreId,
-      userId,
+    const completedChore = {
+      choreInstanceId: assignment.choreInstanceId,
+      userId: assignment.userId,
       completedAt: now,
-      pointsEarned: chore.pointValue,
+      pointsEarned: typeof pointsEarned === 'number' ? pointsEarned : (assignment.pointsEarned || 0),
       createdAt: now,
       updatedAt: now
-    });
-
-    const newCompletedChore: CompletedChore = {
-      id,
-      choreId,
-      userId,
-      completedAt: now.toDate(),
-      pointsEarned: chore.pointValue,
-      createdAt: now.toDate(),
-      updatedAt: now.toDate()
     };
-
-    setCompletedChores(prev => {
-      // Check if this chore is already completed
-      if (prev.some(c => c.id === id)) {
-        return prev;
-      }
-      return [...prev, newCompletedChore];
-    });
-    return id;
+    // Create the CompletedChore record
+    await completeChore(completedChore);
   };
 
   const deleteCompletedChore = async (id: string) => {
@@ -192,8 +231,27 @@ export function ChoreProvider({ children }: { children: ReactNode }) {
     setCompletedChores(prev => prev.filter(c => c.id !== id));
   };
 
-  const getUserChores = (userId: string) => {
-    return chores.filter(chore => chore.assignedTo.includes(userId));
+  const getUserAssignments = async (userId: string): Promise<ChoreAssignmentWithInstance[]> => {
+    const assignments = await dbGetUserChoreAssignments(userId);
+    // Convert Firestore timestamps to JS Dates
+    return assignments.map(a => ({
+      ...a,
+      createdAt: a.createdAt
+        ? (typeof a.createdAt.toDate === 'function' ? a.createdAt.toDate() : (a.createdAt instanceof Date ? a.createdAt : undefined))
+        : undefined,
+      updatedAt: a.updatedAt
+        ? (typeof a.updatedAt.toDate === 'function' ? a.updatedAt.toDate() : (a.updatedAt instanceof Date ? a.updatedAt : undefined))
+        : undefined,
+      choreInstance: a.choreInstance
+        ? {
+            ...a.choreInstance,
+            createdAt: typeof a.choreInstance.createdAt?.toDate === 'function' ? a.choreInstance.createdAt.toDate() : (a.choreInstance.createdAt instanceof Date ? a.choreInstance.createdAt : new Date()),
+            updatedAt: a.choreInstance.updatedAt
+              ? (typeof a.choreInstance.updatedAt.toDate === 'function' ? a.choreInstance.updatedAt.toDate() : (a.choreInstance.updatedAt instanceof Date ? a.choreInstance.updatedAt : new Date()))
+              : new Date(),
+          }
+        : null
+    }));
   };
 
   const getUserCompletedChores = async (userId: string) => {
@@ -202,7 +260,7 @@ export function ChoreProvider({ children }: { children: ReactNode }) {
       ...chore,
       completedAt: (chore.completedAt as Timestamp).toDate(),
       createdAt: (chore.createdAt as Timestamp).toDate(),
-      updatedAt: (chore.updatedAt as Timestamp).toDate()
+      updatedAt: (chore.updatedAt as Timestamp).toDate(),
     }));
     
     // Update state with unique chores only
@@ -215,6 +273,54 @@ export function ChoreProvider({ children }: { children: ReactNode }) {
     return convertedChores;
   };
 
+  // Admin helper: group all assignments by choreInstanceId
+  const getAssignmentsGroupedByChore = async (): Promise<Record<string, ChoreAssignmentWithInstance[]>> => {
+    // Fetch all assignments for all users
+    // @ts-ignore: import is available
+    const { getAllChoreAssignments } = await import("@/lib/db-service");
+    const assignments = await getAllChoreAssignments();
+
+    // Group by choreInstanceId
+    const grouped: Record<string, ChoreAssignmentWithInstance[]> = {};
+    for (const a of assignments) {
+      const instanceId = a.choreInstanceId || "unknown";
+      const assignmentWithInstance: ChoreAssignmentWithInstance = {
+        ...a,
+        createdAt: a.createdAt
+          ? (typeof a.createdAt.toDate === 'function' ? a.createdAt.toDate() : (a.createdAt instanceof Date ? a.createdAt : undefined))
+          : undefined,
+        updatedAt: a.updatedAt
+          ? (typeof a.updatedAt.toDate === 'function' ? a.updatedAt.toDate() : (a.updatedAt instanceof Date ? a.updatedAt : undefined))
+          : undefined,
+
+        choreInstance: a.choreInstance
+          ? {
+              id: a.choreInstance.id || '',
+              title: a.choreInstance.title || '',
+              pointValue: a.choreInstance.pointValue || 0,
+              recurrence: a.choreInstance.recurrence || 'daily',
+              // choreInstanceId already present
+              createdAt: typeof a.choreInstance.createdAt?.toDate === 'function' ? a.choreInstance.createdAt.toDate() : (a.choreInstance.createdAt instanceof Date ? a.choreInstance.createdAt : new Date()),
+              updatedAt: a.choreInstance.updatedAt
+                ? (typeof a.choreInstance.updatedAt.toDate === 'function' ? a.choreInstance.updatedAt.toDate() : (a.choreInstance.updatedAt instanceof Date ? a.choreInstance.updatedAt : new Date()))
+                : new Date(),
+            }
+          : {
+              id: '',
+              title: '',
+              pointValue: 0,
+              recurrence: 'daily',
+              // choreInstanceId already present
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            }
+      };
+      if (!grouped[instanceId]) grouped[instanceId] = [];
+      grouped[instanceId].push(assignmentWithInstance);
+    }
+    return grouped;
+  };
+
   if (isLoading) {
     return <div>Loading chores...</div>;
   }
@@ -223,14 +329,16 @@ export function ChoreProvider({ children }: { children: ReactNode }) {
     <ChoreContext.Provider
       value={{
         chores,
+        choreInstances,
         completedChores,
         addChore,
         updateChore,
         deleteChore,
-        completeChore,
+        completeAssignment,
         deleteCompletedChore,
-        getUserChores,
+        getUserAssignments,
         getUserCompletedChores,
+        getAssignmentsGroupedByChore,
       }}
     >
       {children}

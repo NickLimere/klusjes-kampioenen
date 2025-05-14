@@ -19,21 +19,32 @@ export interface Chore {
   pointValue: number;
   assignedTo: string[];
   recurrence: 'daily' | 'weekly' | 'one-time';
-  dueDate?: Timestamp;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+export interface ChoreInstance {
+  id: string;
+  title: string;
+  description?: string;
+  pointValue: number;
+  recurrence: 'daily' | 'weekly' | 'one-time';
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
 
 export interface ChoreAssignment {
   id: string;
-  choreId: string;
+  choreInstanceId: string;
   userId: string;
+  pointsEarned?: number;
   createdAt: Timestamp;
+  updatedAt: Timestamp;
 }
 
 export interface CompletedChore {
   id: string;
-  choreId: string;
+  choreInstanceId: string;
   userId: string;
   completedAt: Timestamp;
   pointsEarned: number;
@@ -58,4 +69,4 @@ export interface RedeemedReward {
   redeemedAt: Timestamp;
   status: 'pending' | 'approved' | 'denied';
   updatedAt: Timestamp;
-} 
+}

@@ -38,7 +38,7 @@ export default function HistoryCalendar() {
     acc[dateStr].points += cc.pointsEarned;
     
     // Find the chore details
-    const choreDetails = chores.find(c => c.id === cc.choreId);
+    const choreDetails = chores.find(c => c.id === cc.choreInstanceId);
     if (choreDetails) {
       acc[dateStr].chores.push({
         ...cc,
@@ -81,21 +81,6 @@ export default function HistoryCalendar() {
                 backgroundColor: "rgba(155, 135, 245, 0.1)",
                 fontWeight: "bold",
                 borderRadius: "0.25rem",
-              },
-            }}
-            components={{
-              DayContent: (props) => {
-                const dateStr = props.date.toDateString();
-                const hasCompleted = completedDatesMap[dateStr];
-                
-                return (
-                  <div className="relative h-full w-full p-1">
-                    <span>{props.date.getDate()}</span>
-                    {hasCompleted && (
-                      <span className="absolute bottom-0 right-0 flex h-2 w-2 rounded-full bg-joy-secondary" />
-                    )}
-                  </div>
-                );
               },
             }}
           />

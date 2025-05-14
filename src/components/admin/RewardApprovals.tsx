@@ -75,7 +75,7 @@ export default function RewardApprovals() {
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3">
                     <div className="bg-white p-2 rounded-lg shadow-sm text-xl">
-                      {reward.image || "🎁"}
+                      {"🎁"}
                     </div>
                     <div>
                       <h3 className="font-medium">{reward.title}</h3>

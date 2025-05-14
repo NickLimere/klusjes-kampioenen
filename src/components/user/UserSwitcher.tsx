@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useUser, User } from "@/contexts/UserContext";
 import { ChevronDown } from "lucide-react";
 import { 
@@ -12,6 +13,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 export default function UserSwitcher() {
+  const navigate = useNavigate();
   const { users, currentUser, setCurrentUser } = useUser();
   const [open, setOpen] = useState(false);
 
@@ -50,6 +52,7 @@ export default function UserSwitcher() {
             onClick={() => {
               setCurrentUser(user);
               setOpen(false);
+              navigate('/');
             }}
           >
             <div className="flex items-center gap-2">

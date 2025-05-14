@@ -15,6 +15,7 @@ import type {
   User, 
   Chore, 
   ChoreAssignment, 
+  ChoreInstance,
   CompletedChore, 
   Reward, 
   RedeemedReward 
@@ -23,6 +24,7 @@ import type {
 // Collections
 const usersCollection = collection(db, 'users');
 const choresCollection = collection(db, 'chores');
+const choreInstancesCollection = collection(db, 'choreInstances');
 const choreAssignmentsCollection = collection(db, 'choreAssignments');
 const completedChoresCollection = collection(db, 'completedChores');
 const rewardsCollection = collection(db, 'rewards');
@@ -119,27 +121,77 @@ export const deleteChore = async (id: string): Promise<void> => {
   await deleteDoc(docRef);
 };
 
+// Chore Instance operations
+export const createChoreInstance = async (instance: Omit<ChoreInstance, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
+  const newInstance = {
+    ...instance,
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now()
+  };
+  const docRef = await addDoc(choreInstancesCollection, newInstance);
+  return docRef.id;
+};
+
 // Chore Assignment operations
-export const assignChore = async (assignment: Omit<ChoreAssignment, 'id' | 'createdAt'>): Promise<string> => {
+export const assignChoreInstance = async (
+  choreInstanceId: string,
+  userId: string,
+  pointsEarned?: number
+): Promise<string> => {
   const newAssignment = {
-    ...assignment,
-    createdAt: Timestamp.now()
+    choreInstanceId,
+    userId,
+
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
+    pointsEarned: pointsEarned || 0
   };
   const docRef = await addDoc(choreAssignmentsCollection, newAssignment);
   return docRef.id;
 };
 
-export const getUserChores = async (userId: string): Promise<Chore[]> => {
+export const getUserChoreAssignments = async (userId: string): Promise<(ChoreAssignment & { choreInstance: ChoreInstance | null })[]> => {
   const assignmentsQuery = query(choreAssignmentsCollection, where('userId', '==', userId));
   const assignmentsSnapshot = await getDocs(assignmentsQuery);
-  const choreIds = assignmentsSnapshot.docs.map(doc => doc.data().choreId);
-  
-  const chores: Chore[] = [];
-  for (const choreId of choreIds) {
-    const chore = await getChore(choreId);
-    if (chore) chores.push(chore);
+
+  // Helper to fetch a chore instance by ID
+  async function getChoreInstance(instanceId: string): Promise<ChoreInstance | null> {
+    const docRef = doc(choreInstancesCollection, instanceId);
+    const docSnap = await getDoc(docRef);
+    return docSnap.exists() ? { ...docSnap.data(), id: docSnap.id } as ChoreInstance : null;
   }
-  return chores;
+
+  const results: (ChoreAssignment & { choreInstance: ChoreInstance | null })[] = [];
+  for (const docSnap of assignmentsSnapshot.docs) {
+    const assignment = docSnap.data() as ChoreAssignment;
+    const choreInstance = assignment.choreInstanceId ? await getChoreInstance(assignment.choreInstanceId) : null;
+    results.push({ ...assignment, id: docSnap.id, choreInstance });
+  }
+  return results;
+};
+
+// ADMIN: Fetch all assignments for all users, including their related chore instances
+export const getAllChoreAssignments = async (): Promise<(ChoreAssignment & { choreInstance: ChoreInstance | null })[]> => {
+  const assignmentsSnapshot = await getDocs(choreAssignmentsCollection);
+
+  async function getChoreInstance(instanceId: string): Promise<ChoreInstance | null> {
+    const docRef = doc(choreInstancesCollection, instanceId);
+    const docSnap = await getDoc(docRef);
+    return docSnap.exists() ? { ...docSnap.data(), id: docSnap.id } as ChoreInstance : null;
+  }
+
+  const results: (ChoreAssignment & { choreInstance: ChoreInstance | null })[] = [];
+  for (const docSnap of assignmentsSnapshot.docs) {
+    const assignment = docSnap.data() as ChoreAssignment;
+    const choreInstance = assignment.choreInstanceId ? await getChoreInstance(assignment.choreInstanceId) : null;
+    results.push({ ...assignment, id: docSnap.id, choreInstance });
+  }
+  return results;
+};
+
+export const completeAssignment = async (assignmentId: string, pointsEarned?: number): Promise<void> => {
+  // No longer update assignment; all completions tracked in completedChores
+  return;
 };
 
 // Completed Chore operations
@@ -167,11 +219,11 @@ export const getUserCompletedChores = async (userId: string): Promise<CompletedC
 };
 
 export const getChoreCompletionHistory = async (
-  choreId: string,
+  choreInstanceId: string,
   startDate?: Date,
   endDate?: Date
 ): Promise<CompletedChore[]> => {
-  let q = query(completedChoresCollection, where('choreId', '==', choreId));
+  let q = query(completedChoresCollection, where('choreInstanceId', '==', choreInstanceId));
   
   if (startDate && endDate) {
     q = query(q, 

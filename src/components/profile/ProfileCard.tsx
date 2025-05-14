@@ -39,18 +39,18 @@ export default function ProfileCard() {
   const choreCountMap: Record<string, number> = {};
   
   userCompletedChores.forEach(cc => {
-    if (!choreCountMap[cc.choreId]) {
-      choreCountMap[cc.choreId] = 0;
+    if (!choreCountMap[cc.choreInstanceId]) {
+      choreCountMap[cc.choreInstanceId] = 0;
     }
-    choreCountMap[cc.choreId]++;
+    choreCountMap[cc.choreInstanceId]++;
   });
   
   let favoriteChoreId = "";
   let favoriteChoreCount = 0;
   
-  Object.entries(choreCountMap).forEach(([choreId, count]) => {
+  Object.entries(choreCountMap).forEach(([choreInstanceId, count]) => {
     if (count > favoriteChoreCount) {
-      favoriteChoreId = choreId;
+      favoriteChoreId = choreInstanceId;
       favoriteChoreCount = count;
     }
   });
