@@ -7,11 +7,14 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export default function ChoreList() {
+  // ...existing hooks
   const { getUserAssignments, completeAssignment, getUserCompletedChores } = useChore();
   const { currentUser, updateUser } = useUser();
   const [assignments, setAssignments] = useState<ChoreAssignmentWithInstance[]>([]);
   const [completing, setCompleting] = useState<string[]>([]);
   const [completedChores, setCompletedChores] = useState<any[]>([]);
+  // Track recently completed assignments for animation/removal
+  const [recentlyCompleted, setRecentlyCompleted] = useState<string[]>([]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -49,14 +52,16 @@ export default function ChoreList() {
     return false;
   };
 
-  // Filter assignments for active (incomplete) chores
+  // Filter assignments for active (incomplete) chores, but keep recently completed for animation
   const availableAssignments = assignments.filter(a => {
     if (!a.choreInstance) return false;
-    return !isAssignmentCompleted(a);
+    // Show if not completed, or if just completed and animating out
+    return !isAssignmentCompleted(a) || recentlyCompleted.includes(a.id);
   });
 
   const handleCompleteAssignment = async (assignment: ChoreAssignmentWithInstance) => {
     setCompleting(prev => [...prev, assignment.id]);
+    setRecentlyCompleted(prev => [...prev, assignment.id]);
     try {
       await completeAssignment(assignment.id, assignment.choreInstance?.pointValue);
       // Optionally update user points
@@ -68,14 +73,18 @@ export default function ChoreList() {
       }
       // Refresh assignments
       const data = await getUserAssignments(currentUser.id);
-      console.log('[ChoreList useEffect] Loaded assignments:', data);
       setAssignments(data);
+      // Remove from recentlyCompleted after delay (for animation)
+      setTimeout(() => {
+        setRecentlyCompleted(prev => prev.filter(id => id !== assignment.id));
+      }, 600); // 600ms for smooth transition
     } catch (error) {
       console.error('Error completing assignment:', error);
     } finally {
       setCompleting(prev => prev.filter(id => id !== assignment.id));
     }
   };
+
 
 
 
@@ -93,6 +102,8 @@ export default function ChoreList() {
             const choreInstance: ChoreInstance | null = assignment.choreInstance;
             if (!choreInstance) return null;
             const completed = isAssignmentCompleted(assignment);
+            // If completed and not in recentlyCompleted, don't render (should be filtered out)
+            if (completed && !recentlyCompleted.includes(assignment.id)) return null;
             return (
               <div 
                 key={assignment.id}
@@ -100,8 +111,11 @@ export default function ChoreList() {
                   "flex items-center justify-between p-3 rounded-xl transition-all",
                   completed 
                     ? "bg-green-50 border border-green-100" 
-                    : "bg-gray-50 border border-gray-100 hover:bg-gray-100"
+                    : "bg-gray-50 border border-gray-100 hover:bg-gray-100",
+                  // Animate opacity out if recently completed and completed
+                  completed && recentlyCompleted.includes(assignment.id) && "opacity-100 animate-fade-out"
                 )}
+                style={{ transition: 'all 0.5s' }}
               >
                 <div className="flex items-center gap-3">
                   <Button
