@@ -8,18 +8,23 @@ import {
   CardTitle 
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Clock, CheckCircle, X } from "lucide-react";
+import { Clock, CheckCircle, X, FilterX } from "lucide-react"; // Added FilterX for empty state
 
-export default function MyRewards() {
+interface MyRewardsProps {
+  selectedStatuses: string[];
+}
+
+export default function MyRewards({ selectedStatuses }: MyRewardsProps) {
   const { redeemedRewards, rewards } = useReward();
   const { currentUser } = useUser();
   
   if (!currentUser) return null;
   
   // Get redeemed rewards for this user
-  const userRedeemedRewards = redeemedRewards.filter(
-    rr => rr.userId === currentUser.id
-  );
+  // Get redeemed rewards for this user, then filter by selected statuses
+  const userRedeemedRewards = redeemedRewards
+    .filter(rr => rr.userId === currentUser.id)
+    .filter(rr => selectedStatuses.length === 0 || selectedStatuses.includes(rr.status)); // If no statuses selected, show all (though current default prevents this)
   
   // Sort by most recent first
   userRedeemedRewards.sort((a, b) => 
@@ -27,7 +32,17 @@ export default function MyRewards() {
   );
   
   if (userRedeemedRewards.length === 0) {
-    return null;
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <div className="text-center text-gray-500 py-8">
+            <FilterX className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+            <p className="font-semibold">No Rewards Found</p>
+            <p className="text-sm">Try adjusting your status filters or redeem new rewards.</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
   }
   
   // Get status icon based on reward status
@@ -85,7 +100,7 @@ export default function MyRewards() {
               >
                 <div className="flex items-center gap-3">
                   <div className="bg-white p-2 rounded-md shadow-sm text-xl">
-                    {reward.image || "🎁"}
+                    {reward.icon || "🎁"}
                   </div>
                   <div>
                     <h3 className="font-medium">{reward.title}</h3>

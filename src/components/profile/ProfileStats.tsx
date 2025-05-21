@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 
 export default function ProfileStats() {
-  const { completedChores, chores } = useChore();
+  const { completedChores, allAssignments } = useChore();
   const { currentUser } = useUser();
   
   if (!currentUser) return null;
@@ -15,9 +15,14 @@ export default function ProfileStats() {
     cc => cc.userId === currentUser.id
   );
   
-  // Get user's assigned chores
-  const userChores = chores.filter(
-    chore => chore.assignedTo.includes(currentUser.id)
+  // Get unique chore instances assigned to the current user
+  const userChores = Array.from(
+    new Map(
+      allAssignments
+        .filter(assignment => assignment.userId === currentUser.id && assignment.choreInstance)
+        .map(assignment => assignment.choreInstance!) // choreInstance is confirmed non-null by the filter
+        .map(instance => [instance.id, instance]) // Create [id, instance] pairs for Map constructor
+    ).values() // Get an array of unique ChoreInstance objects
   );
   
   // Calculate completion rate for this week

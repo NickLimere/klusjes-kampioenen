@@ -13,7 +13,6 @@ import {
 } from 'firebase/firestore';
 import type { 
   User, 
-  Chore, 
   ChoreAssignment, 
   ChoreInstance,
   CompletedChore, 
@@ -23,7 +22,6 @@ import type {
 
 // Collections
 const usersCollection = collection(db, 'users');
-const choresCollection = collection(db, 'chores');
 const choreInstancesCollection = collection(db, 'choreInstances');
 const choreAssignmentsCollection = collection(db, 'choreAssignments');
 const completedChoresCollection = collection(db, 'completedChores');
@@ -80,48 +78,21 @@ export const createUsers = async (users: Omit<User, 'id'>[]): Promise<User[]> =>
   return createdUsers;
 };
 
-// Chore operations
-export const getChore = async (id: string): Promise<Chore | null> => {
-  const docRef = doc(choresCollection, id);
+// Chore Instance operations
+export const getChoreInstance = async (id: string): Promise<ChoreInstance | null> => {
+  const docRef = doc(choreInstancesCollection, id);
   const docSnap = await getDoc(docRef);
-  return docSnap.exists() ? docSnap.data() as Chore : null;
+  return docSnap.exists() ? docSnap.data() as ChoreInstance : null;
 };
 
-export const getChores = async (): Promise<Chore[]> => {
-  console.log('Fetching chores from Firestore...');
-  const querySnapshot = await getDocs(choresCollection);
-  const chores = querySnapshot.docs.map(doc => ({
+export const getChoreInstances = async (): Promise<ChoreInstance[]> => {
+  const querySnapshot = await getDocs(choreInstancesCollection);
+  return querySnapshot.docs.map(doc => ({
     ...doc.data(),
     id: doc.id
-  } as Chore));
-  console.log(`Found ${chores.length} chores:`, chores);
-  return chores;
+  } as ChoreInstance));
 };
 
-export const createChore = async (chore: Omit<Chore, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
-  const newChore = {
-    ...chore,
-    createdAt: Timestamp.now(),
-    updatedAt: Timestamp.now()
-  };
-  const docRef = await addDoc(choresCollection, newChore);
-  return docRef.id;
-};
-
-export const updateChore = async (id: string, chore: Partial<Chore>): Promise<void> => {
-  const docRef = doc(choresCollection, id);
-  await updateDoc(docRef, {
-    ...chore,
-    updatedAt: Timestamp.now()
-  });
-};
-
-export const deleteChore = async (id: string): Promise<void> => {
-  const docRef = doc(choresCollection, id);
-  await deleteDoc(docRef);
-};
-
-// Chore Instance operations
 export const createChoreInstance = async (instance: Omit<ChoreInstance, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
   const newInstance = {
     ...instance,
@@ -130,6 +101,29 @@ export const createChoreInstance = async (instance: Omit<ChoreInstance, 'id' | '
   };
   const docRef = await addDoc(choreInstancesCollection, newInstance);
   return docRef.id;
+};
+
+export const updateChoreInstance = async (id: string, instance: Partial<ChoreInstance>): Promise<void> => {
+  const docRef = doc(choreInstancesCollection, id);
+  await updateDoc(docRef, {
+    ...instance,
+    updatedAt: Timestamp.now()
+  });
+};
+
+export const deleteChoreInstance = async (instanceId: string): Promise<void> => {
+  // First, delete all assignments related to this chore instance
+  const assignmentsQuery = query(choreAssignmentsCollection, where('choreInstanceId', '==', instanceId));
+  const assignmentsSnapshot = await getDocs(assignmentsQuery);
+  const deletePromises: Promise<void>[] = [];
+  assignmentsSnapshot.forEach((assignmentDoc) => {
+    deletePromises.push(deleteDoc(doc(choreAssignmentsCollection, assignmentDoc.id)));
+  });
+  await Promise.all(deletePromises);
+
+  // Then, delete the chore instance itself
+  const instanceDocRef = doc(choreInstancesCollection, instanceId);
+  await deleteDoc(instanceDocRef);
 };
 
 // Chore Assignment operations
@@ -345,4 +339,12 @@ export const getUserRedeemedRewards = async (userId: string): Promise<RedeemedRe
     ...doc.data(),
     id: doc.id
   } as RedeemedReward));
-}; 
+};
+
+export const getAllRedeemedRewards = async (): Promise<RedeemedReward[]> => {
+  const querySnapshot = await getDocs(redeemedRewardsCollection);
+  return querySnapshot.docs.map(doc => ({
+    ...doc.data(),
+    id: doc.id
+  } as RedeemedReward));
+};

@@ -12,7 +12,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 export default function ProfileCard() {
   const { currentUser } = useUser();
-  const { completedChores, chores } = useChore();
+  const { completedChores, choreInstances: chores } = useChore(); // Renamed choreInstances to chores for minimal downstream changes
   const { redeemedRewards } = useReward();
   
   if (!currentUser) return null;
@@ -93,7 +93,7 @@ export default function ProfileCard() {
             <div className="bg-white p-2 rounded-lg shadow-sm mb-2">
               <Star className="h-6 w-6 text-joy-accent" />
             </div>
-            <span className="text-xl font-bold">{userRedeemedRewards.length}</span>
+            <span className="text-xl font-bold">{userRedeemedRewards.filter(rr => rr.status === "approved").length}</span>
             <span className="text-sm text-gray-600">Rewards redeemed</span>
           </div>
         </div>

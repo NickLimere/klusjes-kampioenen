@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, ReactNode, useEffect } from "react";
+import { createContext, useContext, useState, ReactNode, useEffect, useMemo, useCallback } from "react";
 import { getUsers, updateUser as updateUserInDb } from "@/lib/db-service";
 import { Timestamp } from "firebase/firestore";
 
@@ -18,7 +18,8 @@ export interface User {
 export interface UserContextType {
   currentUser: User | null;
   users: User[];
-  setCurrentUser: (user: User) => void;
+  isLoading: boolean; // Added isLoading
+  setCurrentUser: (user: User | null) => void; // Allow setting to null for logout scenarios etc.
   addUser: (user: User) => void;
   updateUser: (user: User) => void;
 }
@@ -26,6 +27,7 @@ export interface UserContextType {
 // Create the context
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
+// Context provider component
 // Context provider component
 export function UserProvider({ children }: { children: ReactNode }) {
   const [users, setUsers] = useState<User[]>([]);
@@ -67,11 +69,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
     fetchUsers();
   }, []);
 
-  const addUser = (user: User) => {
+  const addUser = useCallback((user: User) => {
     setUsers((prevUsers) => [...prevUsers, user]);
-  };
+  }, []);
 
-  const updateUser = async (updatedUser: User) => {
+  const updateUser = useCallback(async (updatedUser: User) => {
     try {
       // Convert dates to Firestore Timestamps for database update
       const userForDb = {
@@ -96,22 +98,23 @@ export function UserProvider({ children }: { children: ReactNode }) {
       console.error('Error updating user:', error);
       throw error; // Re-throw to handle in the component
     }
-  };
+  }, [currentUser?.id, setCurrentUser]); // Added setCurrentUser to dependencies as it's used indirectly
+
+  const contextValue = useMemo(() => ({
+    currentUser,
+    users,
+    isLoading, // Added isLoading
+    setCurrentUser, 
+    addUser,
+    updateUser,
+  }), [currentUser, users, isLoading, addUser, updateUser]);
 
   if (isLoading) {
     return <div>Loading...</div>;
   }
 
   return (
-    <UserContext.Provider
-      value={{
-        currentUser,
-        users,
-        setCurrentUser,
-        addUser,
-        updateUser,
-      }}
-    >
+    <UserContext.Provider value={contextValue}>
       {children}
     </UserContext.Provider>
   );

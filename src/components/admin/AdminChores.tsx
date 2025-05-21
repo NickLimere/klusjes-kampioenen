@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { useChore, Chore, ChoreAssignmentWithInstance } from "@/contexts/ChoreContext";
+import { useChore, ChoreAssignmentWithInstance } from "@/contexts/ChoreContext";
+import { ChoreInstance } from "@/lib/db-types";
 import { useUser } from "@/contexts/UserContext";
 import { Timestamp } from "firebase/firestore";
 import {
@@ -46,18 +47,21 @@ import { MoreHorizontal, Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 
 export default function AdminChores() {
-  const { chores, addChore, updateChore, deleteChore, getAssignmentsGroupedByChore, completeAssignment } = useChore();
+  const { choreInstances, addChoreInstance, updateChoreInstance, deleteChoreInstance, getAssignmentsGroupedByChore, completeAssignment } = useChore();
   const { users } = useUser();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [newChore, setNewChore] = useState<Partial<Chore>>({
+  // State for the "Add Chore" dialog
+  const [newChoreData, setNewChoreData] = useState<Omit<ChoreInstance, 'id' | 'createdAt' | 'updatedAt'>>({
     title: "",
     description: "",
     pointValue: 5,
-    assignedTo: [],
-    recurrence: "daily",
+    recurrence: "daily", // 'assignedTo' is managed by newChoreAssignedUserIds
   });
-  const [editingChore, setEditingChore] = useState<Chore | null>(null);
+  const [newChoreAssignedUserIds, setNewChoreAssignedUserIds] = useState<string[]>([]);
+  // State for the "Edit Chore" dialog
+  const [editingChoreInstance, setEditingChoreInstance] = useState<ChoreInstance | null>(null);
+  const [editingChoreAssignedUserIds, setEditingChoreAssignedUserIds] = useState<string[]>([]);
   
   // Filter out admin users and sort in specific order
   const userOrder = ['Mia', 'Emma', 'Mama', 'Papa'];
@@ -76,7 +80,7 @@ export default function AdminChores() {
       const grouped = await getAssignmentsGroupedByChore();
       setAssignmentsByChore(grouped);
     })();
-  }, [chores]);
+  }, [choreInstances, getAssignmentsGroupedByChore]);
 
   // --- NEW: Group assignments by choreInstanceId for correct table rendering ---
   const allAssignments = Object.values(assignmentsByChore).flat();
@@ -89,143 +93,98 @@ export default function AdminChores() {
 
   
   const resetChoreForm = () => {
-    setNewChore({
+    setNewChoreData({
       title: "",
       description: "",
       pointValue: 5,
-      assignedTo: [],
       recurrence: "daily",
     });
+    setNewChoreAssignedUserIds([]);
   };
   
-  const handleOpenEditDialog = (chore: Chore) => {
-    setEditingChore(chore);
+  const handleOpenEditDialog = (choreInstance: ChoreInstance, currentAssignedUserIds: string[]) => {
+    setEditingChoreInstance(choreInstance);
+    setEditingChoreAssignedUserIds(currentAssignedUserIds);
     setIsEditDialogOpen(true);
   };
   
-  const handleAddChore = async () => {
-    if (!newChore.title) {
+  const handleAddChoreInstance = async () => {
+    if (!newChoreData.title) {
       toast.error("Please enter a title for the chore");
       return;
     }
     
-    // Filter out any undefined values from assignedTo
-    const validAssignedTo = (newChore.assignedTo || []).filter(id => id !== undefined && id !== null);
-    
-    if (validAssignedTo.length === 0) {
+    if (newChoreAssignedUserIds.length === 0) {
       toast.error("Please assign this chore to at least one person");
       return;
     }
     
-    // Create a chore object that matches the Chore interface from db-types.ts
-    const choreToAdd = {
-      title: newChore.title,
-      description: newChore.description || "",
-      pointValue: newChore.pointValue || 5,
-      assignedTo: validAssignedTo,
-      recurrence: (newChore.recurrence || "daily") as "daily" | "weekly" | "one-time",
-      createdAt: Timestamp.now(),
-      updatedAt: Timestamp.now()
+    const choreInstanceToAdd: Omit<ChoreInstance, 'id' | 'createdAt' | 'updatedAt'> = {
+      title: newChoreData.title,
+      description: newChoreData.description || "",
+      pointValue: newChoreData.pointValue || 0,
+      recurrence: (newChoreData.recurrence || "daily") as "daily" | "weekly" | "one-time",
     };
 
     try {
-      console.log('Starting to add chore with data:', newChore);
-      console.log('Processed chore data:', choreToAdd);
-      console.log('Data types:', {
-        title: typeof choreToAdd.title,
-        description: typeof choreToAdd.description,
-        pointValue: typeof choreToAdd.pointValue,
-        assignedTo: Array.isArray(choreToAdd.assignedTo),
-        assignedToContents: choreToAdd.assignedTo.map(id => ({ id, type: typeof id })),
-        recurrence: typeof choreToAdd.recurrence,
-        createdAt: choreToAdd.createdAt instanceof Timestamp,
-        updatedAt: choreToAdd.updatedAt instanceof Timestamp
-      });
-
-      // Validate required fields
-      if (!choreToAdd.title || !choreToAdd.assignedTo || choreToAdd.assignedTo.length === 0) {
-        console.error('Validation failed:', {
-          hasTitle: !!choreToAdd.title,
-          hasAssignedTo: !!choreToAdd.assignedTo,
-          assignedToLength: choreToAdd.assignedTo.length,
-          assignedToContents: choreToAdd.assignedTo
-        });
-        throw new Error("Missing required fields");
-      }
-
-      // Ensure all fields have the correct type
-      if (typeof choreToAdd.pointValue !== 'number') {
-        console.error('Invalid pointValue type:', typeof choreToAdd.pointValue);
-        throw new Error("Point value must be a number");
-      }
-
-      if (!['daily', 'weekly'].includes(choreToAdd.recurrence)) {
-        console.error('Invalid recurrence value:', choreToAdd.recurrence);
-        throw new Error("Recurrence must be either 'daily' or 'weekly'");
-      }
-
-      console.log('Attempting to add chore to Firestore...');
-      const result = await addChore(choreToAdd, validAssignedTo);
-      console.log('Chore added successfully with ID:', result);
-      
+      await addChoreInstance(choreInstanceToAdd, newChoreAssignedUserIds);
       toast.success("Chore added successfully");
       resetChoreForm();
       setIsAddDialogOpen(false);
     } catch (error) {
-      console.error('Detailed error adding chore:', {
-        error,
-        errorMessage: error instanceof Error ? error.message : 'Unknown error',
-        errorStack: error instanceof Error ? error.stack : 'No stack trace',
-        choreData: newChore,
-        processedChoreData: choreToAdd
-      });
-      toast.error("Failed to add chore. Check console for details.");
+      console.error('Error adding chore:', error);
+      toast.error("Failed to add chore");
     }
   };
   
-  const handleUpdateChore = async () => {
-    if (!editingChore) return;
-    
-    if (!editingChore.title) {
+  const handleUpdateChoreInstance = async () => {
+    if (!editingChoreInstance || !editingChoreInstance.id) {
+      toast.error("Cannot update chore: Essential data missing.");
+      return;
+    }
+
+    const trimmedTitle = editingChoreInstance.title ? editingChoreInstance.title.trim() : "";
+    if (!trimmedTitle) {
       toast.error("Please enter a title for the chore");
       return;
     }
-    
-    if (editingChore.assignedTo.length === 0) {
+
+    const pointValue = (typeof editingChoreInstance.pointValue === 'number' && !isNaN(editingChoreInstance.pointValue))
+      ? editingChoreInstance.pointValue
+      : 0;
+
+    if (editingChoreAssignedUserIds.length === 0) {
       toast.error("Please assign this chore to at least one person");
       return;
     }
-    
+
+    const recurrence = editingChoreInstance.recurrence || "daily";
+
     try {
-      // Create a clean update object without undefined values
-      const updateData = {
-        title: editingChore.title,
-        description: editingChore.description || "",
-        pointValue: editingChore.pointValue,
-        assignedTo: editingChore.assignedTo,
-        recurrence: editingChore.recurrence,
-        updatedAt: Timestamp.now()
+      const choreInstanceUpdateData: Partial<Omit<ChoreInstance, 'id' | 'createdAt' | 'status' | 'dueDate'>> = {
+        title: trimmedTitle,
+        description: editingChoreInstance.description || "",
+        pointValue: pointValue,
+        recurrence: recurrence as "daily" | "weekly" | "one-time",
+        // Status and dueDate could be updated here if they were part of the form
       };
 
-      // Remove any undefined values
-      Object.keys(updateData).forEach(key => {
-        if (updateData[key as keyof typeof updateData] === undefined) {
-          delete updateData[key as keyof typeof updateData];
-        }
-      });
-
-      await updateChore(editingChore.id, updateData);
+      // User assignments are not updated here; this only updates the chore instance properties.
+      // A separate function call would be needed to update assignments if that's desired.
+      await updateChoreInstance(editingChoreInstance.id, choreInstanceUpdateData);
       toast.success("Chore updated successfully");
       setIsEditDialogOpen(false);
+      setEditingChoreInstance(null); // Clear editing chore state on success
     } catch (error) {
       console.error('Error updating chore:', error);
-      toast.error("Failed to update chore");
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+      toast.error(`Failed to update chore: ${errorMessage}`);
     }
   };
   
-  const handleDeleteChore = async (choreId: string) => {
+  const handleDeleteChoreInstance = async (choreId: string) => {
     try {
-      await deleteChore(choreId);
+      await deleteChoreInstance(choreId);
       toast.success("Chore deleted successfully");
     } catch (error) {
       console.error('Error deleting chore:', error);
@@ -295,20 +254,24 @@ export default function AdminChores() {
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem
                           onClick={() => {
-  handleOpenEditDialog({
-    ...choreInstance,
-    assignedTo: assignments.map(a => a.userId),
-    createdAt: choreInstance.createdAt instanceof Timestamp ? choreInstance.createdAt.toDate() : choreInstance.createdAt,
-    updatedAt: choreInstance.updatedAt instanceof Timestamp ? choreInstance.updatedAt.toDate() : choreInstance.updatedAt,
-  });
-}}
+                          const currentAssignedIds = assignments.map(a => a.userId);
+                          // Ensure the instance passed to the dialog conforms to db-types.ChoreInstance (strict Timestamps)
+                          const instanceForDialog: ChoreInstance = {
+                            ...choreInstance,
+                            createdAt: choreInstance.createdAt instanceof Date ? Timestamp.fromDate(choreInstance.createdAt) : choreInstance.createdAt,
+                            updatedAt: choreInstance.updatedAt instanceof Date ? Timestamp.fromDate(choreInstance.updatedAt) : choreInstance.updatedAt,
+                            dueDate: choreInstance.dueDate ? (choreInstance.dueDate instanceof Date ? Timestamp.fromDate(choreInstance.dueDate) : choreInstance.dueDate) : undefined,
+                            completedAt: choreInstance.completedAt ? (choreInstance.completedAt instanceof Date ? Timestamp.fromDate(choreInstance.completedAt) : choreInstance.completedAt) : undefined,
+                          };
+                          handleOpenEditDialog(instanceForDialog, currentAssignedIds);
+                        }}
                         >
                           <Pencil className="h-4 w-4 mr-2" />
                           Edit
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           className="text-red-600"
-                          onClick={() => handleDeleteChore(choreInstance.id)}
+                          onClick={() => handleDeleteChoreInstance(choreInstance.id)}
                         >
                           <Trash2 className="h-4 w-4 mr-2" />
                           Delete
@@ -342,16 +305,16 @@ export default function AdminChores() {
           <Label htmlFor="chore-title">Title</Label>
           <Input
             id="chore-title"
-            value={newChore.title || ""}
-            onChange={e => setNewChore({ ...newChore, title: e.target.value })}
+            value={newChoreData.title || ""}
+            onChange={e => setNewChoreData(prev => ({ ...prev, title: e.target.value }))}
             placeholder="Enter chore title"
           />
 
           <Label htmlFor="chore-desc">Description</Label>
           <Input
             id="chore-desc"
-            value={newChore.description || ""}
-            onChange={e => setNewChore({ ...newChore, description: e.target.value })}
+            value={newChoreData.description || ""}
+            onChange={e => setNewChoreData(prev => ({ ...prev, description: e.target.value }))}
             placeholder="Enter description (optional)"
           />
 
@@ -359,15 +322,15 @@ export default function AdminChores() {
           <Input
             id="chore-points"
             type="number"
-            value={newChore.pointValue || 5}
-            min={1}
-            onChange={e => setNewChore({ ...newChore, pointValue: Number(e.target.value) })}
+            value={newChoreData.pointValue ?? 0}
+            min={0}
+            onChange={e => setNewChoreData(prev => ({ ...prev, pointValue: Number(e.target.value) }))}
           />
 
           <Label htmlFor="chore-recurrence">Recurrence</Label>
           <Select
-            value={newChore.recurrence || "daily"}
-            onValueChange={val => setNewChore({ ...newChore, recurrence: val as "daily" | "weekly" | "one-time" })}
+            value={newChoreData.recurrence || "daily"}
+            onValueChange={val => setNewChoreData(prev => ({ ...prev, recurrence: val as "daily" | "weekly" | "one-time" }))}
           >
             <SelectTrigger id="chore-recurrence">
               <SelectValue />
@@ -385,19 +348,15 @@ export default function AdminChores() {
               <div key={user.id} className="flex items-center gap-2">
                 <Checkbox
                   id={`assign-${user.id}`}
-                  checked={Array.isArray(newChore.assignedTo) && newChore.assignedTo.includes(user.id)}
+                  checked={newChoreAssignedUserIds.includes(user.id!)}
                   onCheckedChange={checked => {
-                    if (checked) {
-                      setNewChore({
-                        ...newChore,
-                        assignedTo: [...(newChore.assignedTo || []), user.id],
-                      });
-                    } else {
-                      setNewChore({
-                        ...newChore,
-                        assignedTo: (newChore.assignedTo || []).filter(id => id !== user.id),
-                      });
-                    }
+                    setNewChoreAssignedUserIds(prevIds => {
+                      if (checked) {
+                        return [...prevIds, user.id!];
+                      } else {
+                        return prevIds.filter(id => id !== user.id!);
+                      }
+                    });
                   }}
                 />
                 <Label htmlFor={`assign-${user.id}`}>{user.name}</Label>
@@ -409,10 +368,91 @@ export default function AdminChores() {
           <Button variant="outline" onClick={() => { setIsAddDialogOpen(false); resetChoreForm(); }}>
             Cancel
           </Button>
-          <Button onClick={handleAddChore}>Add Chore</Button>
+          <Button onClick={handleAddChoreInstance}>Add Chore</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {/* Edit Chore Dialog */}
+    {editingChoreInstance && (
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Chore</DialogTitle>
+            <DialogDescription>Update the details of this chore.</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-4">
+            <Label htmlFor="edit-chore-title">Title</Label>
+            <Input
+              id="edit-chore-title"
+              value={editingChoreInstance?.title || ""}
+              onChange={e => setEditingChoreInstance(prev => prev ? { ...prev, title: e.target.value } : null)}
+              placeholder="Enter chore title"
+            />
+
+            <Label htmlFor="edit-chore-desc">Description</Label>
+            <Input
+              id="edit-chore-desc"
+              value={editingChoreInstance?.description || ""}
+              onChange={e => setEditingChoreInstance(prev => prev ? { ...prev, description: e.target.value } : null)}
+              placeholder="Enter description (optional)"
+            />
+
+            <Label htmlFor="edit-chore-points">Points</Label>
+            <Input
+              id="edit-chore-points"
+              type="number"
+              value={editingChoreInstance?.pointValue ?? 0} // Use ?? to allow 0
+              min={0} // Allow 0 points
+              onChange={e => setEditingChoreInstance(prev => prev ? { ...prev, pointValue: Number(e.target.value) } : null)}
+            />
+
+            <Label htmlFor="edit-chore-recurrence">Recurrence</Label>
+            <Select
+              value={editingChoreInstance?.recurrence || "daily"}
+              onValueChange={val => setEditingChoreInstance(prev => prev ? { ...prev, recurrence: val as "daily" | "weekly" | "one-time" } : null)}
+            >
+              <SelectTrigger id="edit-chore-recurrence">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="daily">Daily</SelectItem>
+                <SelectItem value="weekly">Weekly</SelectItem>
+                <SelectItem value="one-time">One-Time</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Label>Assign To</Label>
+            <div className="flex flex-col gap-2 max-h-32 overflow-y-auto">
+              {childUsers.map(user => (
+                <div key={user.id} className="flex items-center gap-2">
+                  <Checkbox
+                    id={`edit-assign-${user.id}`}
+                    checked={editingChoreAssignedUserIds.includes(user.id!)}
+                    onCheckedChange={checked => {
+                      setEditingChoreAssignedUserIds(prevIds => {
+                        if (checked) {
+                          return [...prevIds, user.id!];
+                        } else {
+                          return prevIds.filter(id => id !== user.id!);
+                        }
+                      });
+                    }}
+                  />
+                  <Label htmlFor={`edit-assign-${user.id}`}>{user.name}</Label>
+                </div>
+              ))}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleUpdateChoreInstance}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    )}
     </>
   );
 }

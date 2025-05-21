@@ -46,11 +46,12 @@ import { toast } from "@/components/ui/sonner";
 export default function AdminRewards() {
   const { rewards, addReward, updateReward, deleteReward, redeemedRewards } = useReward();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isAddEmojiSelectOpen, setIsAddEmojiSelectOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [newReward, setNewReward] = useState<Partial<Reward>>({
     title: "",
     description: "",
-    image: "🎁",
+    icon: "🎁",
     pointCost: 20,
   });
   const [editingReward, setEditingReward] = useState<Reward | null>(null);
@@ -59,7 +60,7 @@ export default function AdminRewards() {
     setNewReward({
       title: "",
       description: "",
-      image: "🎁",
+      icon: "🎁",
       pointCost: 20,
     });
   };
@@ -79,7 +80,7 @@ export default function AdminRewards() {
       id: `r${Date.now()}`,
       title: newReward.title || "",
       description: newReward.description || "",
-      image: newReward.image || "🎁",
+      icon: newReward.icon || "🎁",
       pointCost: newReward.pointCost || 20,
     };
     
@@ -97,9 +98,13 @@ export default function AdminRewards() {
       return;
     }
     
-    updateReward(editingReward);
-    toast.success("Reward updated successfully");
-    setIsEditDialogOpen(false);
+    if (editingReward.id) { // Ensure id is present
+      updateReward(editingReward.id, editingReward);
+      toast.success("Reward updated successfully");
+      setIsEditDialogOpen(false);
+    } else {
+      toast.error("Cannot update reward: ID is missing.");
+    }
   };
   
   const handleDeleteReward = (rewardId: string) => {
@@ -149,7 +154,7 @@ export default function AdminRewards() {
           <TableBody>
             {rewards.map((reward) => (
               <TableRow key={reward.id}>
-                <TableCell className="text-2xl">{reward.image}</TableCell>
+                <TableCell className="text-2xl">{reward.icon}</TableCell>
                 <TableCell className="font-medium">{reward.title}</TableCell>
                 <TableCell>{reward.description}</TableCell>
                 <TableCell>{reward.pointCost}</TableCell>
@@ -198,11 +203,15 @@ export default function AdminRewards() {
             <div className="space-y-2">
               <Label htmlFor="emoji">Icon</Label>
               <Select
-                value={newReward.image}
-                onValueChange={(value) => setNewReward({ ...newReward, image: value })}
+                open={isAddEmojiSelectOpen}
+                onOpenChange={setIsAddEmojiSelectOpen}
+                value={newReward.icon}
+                onValueChange={(value) => setNewReward({ ...newReward, icon: value })}
               >
                 <SelectTrigger id="emoji" className="w-full">
-                  <SelectValue placeholder="Select an emoji" />
+                  <SelectValue placeholder="Select an emoji">
+                    {newReward?.icon ? <span className="text-2xl">{newReward.icon}</span> : undefined}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <div className="grid grid-cols-5 gap-2 p-2">
@@ -212,9 +221,8 @@ export default function AdminRewards() {
                         variant="outline"
                         className="text-2xl p-2 h-10"
                         onClick={() => {
-                          setNewReward({ ...newReward, image: emoji });
-                          const button = document.querySelector('[data-radix-select-viewport]')?.closest('[role="dialog"]')?.querySelector('[role="button"]');
-                          if (button instanceof HTMLElement) button.click();
+                          setNewReward({ ...newReward, icon: emoji });
+                          setIsAddEmojiSelectOpen(false);
                         }}
                       >
                         {emoji}
@@ -290,13 +298,15 @@ export default function AdminRewards() {
               <div className="space-y-2">
                 <Label htmlFor="edit-emoji">Icon</Label>
                 <Select
-                  value={editingReward.image}
+                  value={editingReward.icon}
                   onValueChange={(value) => 
-                    setEditingReward({ ...editingReward, image: value })
+                    setEditingReward({ ...editingReward, icon: value })
                   }
                 >
                   <SelectTrigger id="edit-emoji" className="w-full">
-                    <SelectValue placeholder="Select an emoji" />
+                    <SelectValue placeholder="Select an emoji">
+                      {editingReward?.icon ? <span className="text-2xl">{editingReward.icon}</span> : undefined}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <div className="grid grid-cols-5 gap-2 p-2">
@@ -306,9 +316,9 @@ export default function AdminRewards() {
                           variant="outline"
                           className="text-2xl p-2 h-10"
                           onClick={() => {
-                            setEditingReward({ ...editingReward, image: emoji });
-                            const button = document.querySelector('[data-radix-select-viewport]')?.closest('[role="dialog"]')?.querySelector('[role="button"]');
-                            if (button instanceof HTMLElement) button.click();
+                            setEditingReward({ ...editingReward, icon: emoji });
+                            const triggerButton = document.getElementById('edit-emoji');
+                            if (triggerButton instanceof HTMLElement) triggerButton.click();
                           }}
                         >
                           {emoji}

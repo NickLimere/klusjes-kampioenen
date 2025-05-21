@@ -35,9 +35,18 @@ import { Download } from "lucide-react";
 const COLORS = ["#FF9B42", "#9B87F5", "#4ECDC4", "#FFE66D", "#7AE582"];
 
 export default function AdminAnalytics() {
-  const { completedChores, chores } = useChore();
+  const { completedChores, choreInstances, allAssignments } = useChore();
   const { users } = useUser();
   const [timeframe, setTimeframe] = useState<"week" | "month" | "year">("week");
+
+  if (!choreInstances || !users || !completedChores || !allAssignments) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <p className="text-lg text-gray-500">Loading analytics data...</p>
+      </div>
+    );
+  }
+
   const childUsers = users.filter(user => user.role !== "admin");
   
   // Calculate date ranges based on selected timeframe
@@ -82,24 +91,26 @@ export default function AdminAnalytics() {
     };
   });
   
-  // Prepare data for chore completion pie chart
-  const choreCategories = chores.reduce((acc, chore) => {
-    // Simplified categorization by recurrence (can be enhanced)
-    const category = chore.recurrence === "daily" ? "Daily Chores" : "Weekly Chores";
-    
-    if (!acc[category]) {
-      acc[category] = {
-        name: category,
-        value: 0,
-      };
+  // Prepare data for chore completion pie chart based on recurrence of completed chores' instances
+  const choreCategoriesData: { [key: string]: { name: string; value: number } } = {};
+
+  filteredCompletedChores.forEach(completedChore => {
+    const instance = choreInstances.find(ci => ci.id === completedChore.choreInstanceId);
+    if (instance) {
+      let categoryName = "One-Time Chores"; // Default for 'one-time'
+      if (instance.recurrence === "daily") {
+        categoryName = "Daily Chores";
+      } else if (instance.recurrence === "weekly") {
+        categoryName = "Weekly Chores";
+      }
+      
+      if (!choreCategoriesData[categoryName]) {
+        choreCategoriesData[categoryName] = { name: categoryName, value: 0 };
+      }
+      choreCategoriesData[categoryName].value += 1; // Each completedChore is one completion in its category
     }
-    
-    // Count completions for this chore
-    const completions = filteredCompletedChores.filter(cc => cc.choreInstanceId === chore.id).length;
-    acc[category].value += completions;
-    
-    return acc;
-  }, {} as Record<string, { name: string; value: number }>);
+  });
+  const choreCategories = Object.values(choreCategoriesData);
   
   const pieChartData = Object.values(choreCategories);
   
@@ -244,14 +255,14 @@ export default function AdminAnalytics() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={childUsers.map(user => {
-                    // Get user's assigned chores
-                    const assignedChores = chores.filter(chore => 
-                      chore.assignedTo.includes(user.id)
+                    // Get user's assigned chores from allAssignments
+                    const userAssignments = allAssignments.filter(assignment => 
+                      assignment.userId === user.id
                     );
                     
-                    // Count number of daily and weekly chores
-                    const dailyChores = assignedChores.filter(c => c.recurrence === "daily").length;
-                    const weeklyChores = assignedChores.filter(c => c.recurrence === "weekly").length;
+                    // Count number of daily and weekly chores from the user's assignments
+                    const dailyChores = userAssignments.filter(a => a.choreInstance?.recurrence === "daily").length;
+                    const weeklyChores = userAssignments.filter(a => a.choreInstance?.recurrence === "weekly").length;
                     
                     // Calculate expected completions based on timeframe
                     let expectedCompletions = 0;

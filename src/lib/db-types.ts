@@ -12,23 +12,14 @@ export interface User {
   updatedAt: Timestamp;
 }
 
-export interface Chore {
-  id: string;
-  title: string;
-  description?: string;
-  pointValue: number;
-  assignedTo: string[];
-  recurrence: 'daily' | 'weekly' | 'one-time';
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
-}
-
 export interface ChoreInstance {
   id: string;
   title: string;
   description?: string;
   pointValue: number;
   recurrence: 'daily' | 'weekly' | 'one-time';
+  dueDate?: Timestamp;      // Optional: When the chore is due
+  completedAt?: Timestamp;  // Optional: When the chore instance was completed
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
